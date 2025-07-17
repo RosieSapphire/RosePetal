@@ -1,4 +1,4 @@
-# Rose Petal API
+# Rose Petal
 I have completely lost track of the amount of times I've started a new project and written the same code over and over and over. All of it's just boilerplate necessary for getting things set up. Whether it's a vector type for moving stuff around on the screen or denoting a position, profiling code to see if your optimizations are working, or just keeping track of memory so that you can make sure you freed all of the stuff you've allocated through the course of the program.
 
 That is why I've taken it upon myself to create a library that does all of these base-level things so that making programs is faster and easier as I don't need to worry about rewriting all these low-level processes when I start a new project that utilizes them.
