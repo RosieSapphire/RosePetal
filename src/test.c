@@ -8,7 +8,7 @@ enum {
 
 int main(void)
 {
-        if (!rp_debug_init(RP_INIT_DEBUG_DEFAULT))
+        if (!rp_debug_init(RP_DEBUG_INIT_DEFAULT))
                 return RET_RP_DEBUG_INIT_FAIL;
 
         rp_debug_printf(RP_DEB_STREAM_INFO,

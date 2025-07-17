@@ -1,11 +1,8 @@
-#include <stdio.h>
-
 #pragma once
 
-/* Macros/Defines */
-#define RP_INIT_DEBUG_DEFAULT stdout, stdout, stderr
+#include <stdio.h>
 
-/* Types */
+/* General Types */
 typedef unsigned char  rp_u8_t;
 typedef unsigned short rp_u16_t;
 typedef unsigned int   rp_u32_t;
@@ -23,6 +20,9 @@ enum { RP_FALSE, RP_TRUE };
 /************
  * DEBUGGER *
  ************/
+
+/* Macros */
+#define RP_DEBUG_INIT_DEFAULT stdout, stdout, stderr
 
 /* Enums */
 enum rp_deb_stream {
