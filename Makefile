@@ -26,16 +26,37 @@ SRC_DIRS    := src
 C_FILES     := $(foreach dir, $(SRC_DIRS), $(wildcard $(dir)/*.c))
 O_FILES     := $(C_FILES:%.c=$(BUILD_DIR)/%.o)
 
+COL_COMPILE := setaf 7
+COL_LINKER  := setaf 153
+COL_VERBOSE := setaf 8
+COL_SUCCESS := blink setaf 2 bold
+COL_DEFAULT := sgr0
+
 test: $(TEST_PROG)
+	@tput $(COL_SUCCESS)
+	@printf "Successfully built %s.\n" $<
+	@tput $(COL_DEFAULT)
 
 $(TEST_PROG): $(O_FILES)
-	$(CC) $(CFLAGS) -o $@ $^
+	@tput $(COL_LINKER)
+	@printf "[LD] %s -> %s\n" $^ $@
+	@tput $(COL_VERBOSE)
+	$(V)$(CC) $(CFLAGS) -o $@ $^
+	@tput $(COL_DEFAULT)
 
 $(BUILD_DIR)/%.o: %.c
-	mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -o $@ -c $<
+	@tput $(COL_VERBOSE)
+	$(V)mkdir -p $(dir $@)
+	@tput $(COL_COMPILE)
+	@printf "[CC] %s -> %s\n" $< $@
+	@tput $(COL_VERBOSE)
+	$(V)$(CC) $(CFLAGS) -o $@ -c $<
+	@tput $(COL_DEFAULT)
 
 .PHONY: clean
 
 clean:
-	rm -rf $(BUILD_DIR) $(LIB_STATIC) $(TEST_PROG)
+	@tput $(COL_VERBOSE)
+	$(V)rm -rf $(BUILD_DIR) $(LIB_STATIC) $(TEST_PROG)
+	@tput $(COL_DEFAULT)
+	@printf "Cleaned the previous build.\n"
