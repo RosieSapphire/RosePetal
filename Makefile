@@ -1,4 +1,4 @@
-VERBOSE     := 0
+VERBOSE     := 1
 V           ?=
 ifeq ($(VERBOSE), 0)
 	V := @
@@ -6,12 +6,12 @@ else
 	V :=
 endif
 
-DEBUG       := 0
+DEBUG       := 1
 OPT_AND_DEB ?=
 ifeq ($(DEBUG), 0)
 	OPT_AND_DEB := -O3
 else
-	OPT_AND_DEB := -O0 -ggdb3 -DDEBUG_ENABLED
+	OPT_AND_DEB := -O0 -ggdb3
 endif
 
 CC          := gcc
@@ -22,7 +22,10 @@ LIB_STATIC  := lib$(LIB_NAME).a
 LIB_LINK    := -l$(LIB_NAME)
 TEST_PROG   := $(LIB_NAME)_test
 
+INC_DIRS    := include
+INC_FLAGS   := $(INC_DIRS:%=-I%)
 SRC_DIRS    := src
+H_FILES     := $(foreach dir, $(INC_DIRS), $(wildcard $(dir)/*.h))
 C_FILES     := $(foreach dir, $(SRC_DIRS), $(wildcard $(dir)/*.c))
 O_FILES     := $(C_FILES:%.c=$(BUILD_DIR)/%.o)
 
@@ -40,6 +43,7 @@ test: $(TEST_PROG)
 $(TEST_PROG): $(O_FILES)
 	@tput $(COL_LINKER)
 	@printf "[LD] %s -> %s\n" $^ $@
+
 	@tput $(COL_VERBOSE)
 	$(V)$(CC) $(CFLAGS) -o $@ $^
 	@tput $(COL_DEFAULT)
@@ -47,10 +51,12 @@ $(TEST_PROG): $(O_FILES)
 $(BUILD_DIR)/%.o: %.c
 	@tput $(COL_VERBOSE)
 	$(V)mkdir -p $(dir $@)
+
 	@tput $(COL_COMPILE)
 	@printf "[CC] %s -> %s\n" $< $@
+
 	@tput $(COL_VERBOSE)
-	$(V)$(CC) $(CFLAGS) -o $@ -c $<
+	$(V)$(CC) $(CFLAGS) -o $@ -c $< $(INC_FLAGS)
 	@tput $(COL_DEFAULT)
 
 .PHONY: clean
