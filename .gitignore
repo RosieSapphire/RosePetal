@@ -1,0 +1,7 @@
+# dirs
+.cache/
+build/
+
+# files
+rosepetal_test
+compile_commands.json
