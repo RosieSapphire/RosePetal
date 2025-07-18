@@ -36,10 +36,10 @@ enum { RP_FALSE, RP_TRUE };
 
 /* Enums */
 enum rp_deb_stream {
-        RP_DEB_STREAM_INFO,
-        RP_DEB_STREAM_WARNING,
-        RP_DEB_STREAM_ERROR,
-        RP_DEB_STREAM_CNT
+        RP_DBG_STREAM_INFO,
+        RP_DBG_STREAM_WARNING,
+        RP_DBG_STREAM_ERROR,
+        RP_DBG_STREAM_CNT
 };
 
 /* Functions */

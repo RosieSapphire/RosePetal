@@ -11,13 +11,13 @@ int main(void)
         if (!rp_debug_init(RP_DEBUG_INIT_DEFAULT))
                 return RET_RP_DEBUG_INIT_FAIL;
 
-        rp_debug_printf(RP_DEB_STREAM_INFO,
+        rp_debug_printf(RP_DBG_STREAM_INFO,
                         "This is a test info. %d\n",
                         69);
-        rp_debug_printf(RP_DEB_STREAM_WARNING,
+        rp_debug_printf(RP_DBG_STREAM_WARNING,
                         "This is a test warning. %d\n",
                         420);
-        rp_debug_printf(RP_DEB_STREAM_ERROR,
+        rp_debug_printf(RP_DBG_STREAM_ERROR,
                         "This is a test error. %d\n",
                         42069);
 
