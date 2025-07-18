@@ -7,7 +7,7 @@ endif
 
 # Feature Toggles
 USE_DEBUGGER := 1
-USE_PROFILER := 1
+USE_TIMER    := 1
 
 CC           := gcc
 CFLAGS       := -Wall -Wextra -Werror -ansi -pedantic
@@ -19,8 +19,8 @@ else
 endif
 CFLAGS += $(OPT)
 
-ifeq ($(USE_PROFILER), 1)
-	CFLAGS += -DUSE_PROFILER
+ifeq ($(USE_TIMER), 1)
+	CFLAGS += -DUSE_TIMER
 endif
 
 

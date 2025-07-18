@@ -51,10 +51,10 @@ rp_bool_t rp_debug_printf_ex(const char *file, const int line,
                              const char *fmt, ...);
 rp_bool_t rp_debug_free(void);
 
-/************
- * PROFILER *
- ************/
+/*********
+ * TIMER *
+ *********/
 
 /* Functions */
-rp_bool_t rp_profiler_init(void);
-rp_bool_t rp_profiler_free(void);
+rp_bool_t rp_timer_init(void);
+rp_bool_t rp_timer_free(void);
