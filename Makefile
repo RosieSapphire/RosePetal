@@ -1,20 +1,29 @@
-VERBOSE      := 0
+VERBOSE      := 1
 ifeq ($(VERBOSE), 0)
 	V := @
 else
 	V :=
 endif
 
-DEBUG        := 0
-OPT_AND_DEB  ?=
-ifeq ($(DEBUG), 0)
-	OPT_AND_DEB := -O3
-else
-	OPT_AND_DEB := -O0 -ggdb3
-endif
+# Feature Toggles
+USE_DEBUGGER := 1
+USE_PROFILER := 1
 
 CC           := gcc
-CFLAGS       := -Wall -Wextra -Werror -ansi -pedantic $(OPT_AND_DEB)
+CFLAGS       := -Wall -Wextra -Werror -ansi -pedantic
+
+ifeq ($(USE_DEBUGGER), 0)
+	OPT := -O3
+else
+	OPT := -O0 -ggdb3 -DUSE_DEBUGGER
+endif
+CFLAGS += $(OPT)
+
+ifeq ($(USE_PROFILER), 1)
+	CFLAGS += -DUSE_PROFILER
+endif
+
+
 AR           := ar
 AR_FLAGS     := -rcs
 

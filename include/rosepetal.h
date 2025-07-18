@@ -26,8 +26,12 @@ enum { RP_FALSE, RP_TRUE };
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wvariadic-macros"
+#ifdef USE_DEBUGGER
 #define rp_debug_printf(STREAM, FMT, ...) \
         rp_debug_printf_ex(__FILE__, __LINE__, STREAM, FMT, __VA_ARGS__)
+#else
+#define rp_debug_printf(STREAM, FMT, ...)
+#endif
 #pragma GCC diagnostic pop
 
 /* Enums */
@@ -46,3 +50,11 @@ rp_bool_t rp_debug_printf_ex(const char *file, const int line,
                              const enum rp_deb_stream stream,
                              const char *fmt, ...);
 rp_bool_t rp_debug_free(void);
+
+/************
+ * PROFILER *
+ ************/
+
+/* Functions */
+rp_bool_t rp_profiler_init(void);
+rp_bool_t rp_profiler_free(void);
