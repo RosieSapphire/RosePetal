@@ -1,4 +1,4 @@
-VERBOSE      := 1
+VERBOSE      := 0
 ifeq ($(VERBOSE), 0)
 	V := @
 else
@@ -35,6 +35,7 @@ TEST_O       := $(BUILD_DIR)/src/test.o
 
 COL_COMPILE  := setaf 3
 COL_LINKER   := setaf 153
+COL_LIB_MAKE := setaf 12
 COL_VERBOSE  := setaf 8
 COL_SUCCESS  := blink setaf 2 bold
 COL_DEFAULT  := sgr0
@@ -42,7 +43,12 @@ COL_DEFAULT  := sgr0
 lib: $(LIB_STATIC)
 
 $(LIB_STATIC): $(O_FILES_RP)
-	$(AR) $(AR_FLAGS) $@ $^
+	@tput $(COL_VERBOSE)
+	$(V)$(AR) $(AR_FLAGS) $@ $^
+
+	@tput $(COL_LIB_MAKE)
+	@printf "[AR] %s -> %s\n" "$^" "$<"
+	@tput $(COL_DEFAULT)
 
 test: $(TEST_PROG)
 	@tput $(COL_SUCCESS)

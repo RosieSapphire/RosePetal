@@ -28,15 +28,17 @@ rp_bool_t rp_debug_init(FILE *info_stream,
         return RP_TRUE;
 }
 
-rp_bool_t rp_debug_printf(const enum rp_deb_stream stream, const char *fmt, ...)
+rp_bool_t rp_debug_printf_ex(const char *file, const int line,
+                             const enum rp_deb_stream stream,
+                             const char *fmt, ...)
 {
         va_list args;
         FILE *strm;
         rp_int_t stat;
         const char *strm_prefix[RP_DEB_STREAM_CNT] = {
-                "\x1b[0;36mINFO:    \x1b[0m",
-                "\x1b[0;33mWARNING: \x1b[0m",
-                "\x1b[0;31mERROR:   \x1b[0m"
+                "\x1b[0;36mINFO   \x1b[0m",
+                "\x1b[0;33mWARNING\x1b[0m",
+                "\x1b[0;31mERROR  \x1b[0m"
         };
 
         strm = debug_streams[stream];
@@ -47,7 +49,7 @@ rp_bool_t rp_debug_printf(const enum rp_deb_stream stream, const char *fmt, ...)
                 return RP_FALSE;
         }
 
-        stat = fprintf(strm, "%s", strm_prefix[stream]);
+        stat = fprintf(strm, "%s %s:%d : ", strm_prefix[stream], file, line);
         if (!stat) {
                 fprintf(DEB_STREAM_ERROR_FALLBACK,
                         "`rp_debug_printf()`: Failed to run "
