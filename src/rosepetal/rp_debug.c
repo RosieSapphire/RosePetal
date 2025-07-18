@@ -9,12 +9,12 @@
 #define RP_DBG_ARG __attribute__((unused))
 #endif
 
-#define DEB_STREAM_INFO_FALLBACK    stdout
-#define DEB_STREAM_WARNING_FALLBACK stdout
-#define DEB_STREAM_ERROR_FALLBACK   stderr
+#define DBG_STREAM_INFO_FALLBACK    stdout
+#define DBG_STREAM_WARNING_FALLBACK stdout
+#define DBG_STREAM_ERROR_FALLBACK   stderr
 
 #ifdef USE_DEBUGGER
-static FILE     *debug_streams[RP_DEB_STREAM_CNT];
+static FILE     *debug_streams[RP_DBG_STREAM_CNT];
 static rp_bool_t debug_is_init = RP_FALSE;
 #endif
 
@@ -31,9 +31,9 @@ rp_bool_t rp_debug_init(RP_DBG_ARG FILE *info_stream,
                 return RP_FALSE;
         }
 
-        debug_streams[RP_DEB_STREAM_INFO]    = info_stream;
-        debug_streams[RP_DEB_STREAM_WARNING] = warning_stream;
-        debug_streams[RP_DEB_STREAM_ERROR]   = error_stream;
+        debug_streams[RP_DBG_STREAM_INFO]    = info_stream;
+        debug_streams[RP_DBG_STREAM_WARNING] = warning_stream;
+        debug_streams[RP_DBG_STREAM_ERROR]   = error_stream;
         debug_is_init                        = RP_TRUE;
 
         return RP_TRUE;
@@ -51,7 +51,7 @@ rp_bool_t rp_debug_printf_ex(RP_DBG_ARG const char *file,
         va_list args;
         FILE *strm;
         rp_int_t stat;
-        const char *strm_prefix[RP_DEB_STREAM_CNT] = {
+        const char *strm_prefix[RP_DBG_STREAM_CNT] = {
                 "\x1b[0;36mINFO   \x1b[0m",
                 "\x1b[0;33mWARNING\x1b[0m",
                 "\x1b[0;31mERROR  \x1b[0m"
@@ -59,7 +59,7 @@ rp_bool_t rp_debug_printf_ex(RP_DBG_ARG const char *file,
 
         strm = debug_streams[stream];
         if (!strm) {
-                fprintf(DEB_STREAM_ERROR_FALLBACK,
+                fprintf(DBG_STREAM_ERROR_FALLBACK,
                         "`rp_debug_printf()`: Trying to "
                         "print to invalid steam.\n");
                 return RP_FALSE;
@@ -67,7 +67,7 @@ rp_bool_t rp_debug_printf_ex(RP_DBG_ARG const char *file,
 
         stat = fprintf(strm, "%s %s:%d : ", strm_prefix[stream], file, line);
         if (!stat) {
-                fprintf(DEB_STREAM_ERROR_FALLBACK,
+                fprintf(DBG_STREAM_ERROR_FALLBACK,
                         "`rp_debug_printf()`: Failed to run "
                         "`fprintf()` error_code=%d.\n", stat);
                 return RP_FALSE;
@@ -77,7 +77,7 @@ rp_bool_t rp_debug_printf_ex(RP_DBG_ARG const char *file,
 
         stat = vfprintf(strm, fmt, args);
         if (!stat) {
-                fprintf(DEB_STREAM_ERROR_FALLBACK,
+                fprintf(DBG_STREAM_ERROR_FALLBACK,
                         "`rp_debug_printf()`: Failed to run "
                         "`vfprintf()` error_code=%d.\n", stat);
                 return RP_FALSE;
@@ -102,7 +102,7 @@ rp_bool_t rp_debug_free(void)
                 return RP_FALSE;
         }
 
-        for (i = 0; i < RP_DEB_STREAM_CNT; ++i)
+        for (i = 0; i < RP_DBG_STREAM_CNT; ++i)
                 debug_streams[i] = NULL;
 
         debug_is_init = RP_FALSE;
