@@ -50,7 +50,7 @@ rp_bool_t rp_debug_printf_ex(RP_DBG_ARG const char *file,
 #else
         va_list args;
         FILE *strm;
-        rp_int_t stat;
+        rp_s32_t stat;
         const char *strm_prefix[RP_DBG_STREAM_CNT] = {
                 "\x1b[0;36mINFO   \x1b[0m",
                 "\x1b[0;33mWARNING\x1b[0m",

@@ -8,6 +8,7 @@ endif
 # Feature Toggles
 USE_DEBUGGER := 1
 USE_TIMER    := 1
+BE_PARANOID  := 1
 
 CC           := gcc
 CFLAGS       := -Wall -Wextra -Werror -ansi -pedantic
@@ -23,6 +24,9 @@ ifeq ($(USE_TIMER), 1)
 	CFLAGS += -DUSE_TIMER
 endif
 
+ifeq ($(BE_PARANOID), 1)
+	CFLAGS += -DBE_PARANOID
+endif
 
 AR           := ar
 AR_FLAGS     := -rcs
