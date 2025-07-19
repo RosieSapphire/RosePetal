@@ -10,15 +10,14 @@ USE_DEBUGGER := 1
 USE_TIMER    := 1
 BE_PARANOID  := 1
 
+COMPILE_DBG  := 1
+
 CC           := gcc
 CFLAGS       := -Wall -Wextra -Werror -ansi -pedantic
 
-ifeq ($(USE_DEBUGGER), 0)
-	OPT := -O3
-else
-	OPT := -O0 -ggdb3 -DUSE_DEBUGGER
+ifeq ($(USE_DEBUGGER), 1)
+	CFLAGS += -DUSE_DEBUGGER
 endif
-CFLAGS += $(OPT)
 
 ifeq ($(USE_TIMER), 1)
 	CFLAGS += -DUSE_TIMER
@@ -26,6 +25,12 @@ endif
 
 ifeq ($(BE_PARANOID), 1)
 	CFLAGS += -DBE_PARANOID
+endif
+
+ifeq ($(COMBILE_DBG), 0)
+	CFLAGS += -O3
+else
+	CFLAGS += -O0 -ggdb3
 endif
 
 AR           := ar

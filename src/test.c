@@ -21,8 +21,9 @@ int main(void)
         if (!rp_timer_init())
                 return RET_RP_TIMER_INIT_FAIL;
 
-        time_prv = rp_timer_get_sec64();
-        time_cur = time_prv;
+        time_prv   = rp_timer_get_sec64();
+        time_cur   = time_prv;
+        time_accum = 0.;
 
         while (1) {
                 static       rp_s32_t tick_cnt   = 0;
@@ -34,8 +35,8 @@ int main(void)
                 time_accum += (time_cur - time_prv);
 
                 while (time_accum >= tick_delta) {
-                        rp_debug_printf(RP_DBG_STREAM_INFO,
-                                        "Tick %d.\n", ++tick_cnt);
+                        ++tick_cnt;
+                        rp_debugf(RP_DBG_STREAM_INFO, "Tick %d.\n", tick_cnt);
                         time_accum -= tick_delta;
                 }
         }

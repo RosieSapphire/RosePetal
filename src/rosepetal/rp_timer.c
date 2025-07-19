@@ -1,3 +1,4 @@
+#ifdef USE_TIMER
 
 #include <time.h>
 #include <sys/time.h>
@@ -59,7 +60,7 @@ static rp_bool_t rp_timer_is_init = RP_FALSE;
 rp_bool_t rp_timer_init(void)
 {
         if (rp_timer_is_init) {
-                rp_debug_printf(RP_DBG_STREAM_WARNING,
+                rp_debugf(RP_DBG_STREAM_WARNING,
                                 "Trying to init timer subsystem "
                                 "even though it is already active.\n", NULL);
                 return RP_FALSE;
@@ -100,7 +101,7 @@ rp_f32_t rp_timer_get_sec(void)
 rp_bool_t rp_timer_free(void)
 {
         if (!rp_timer_is_init) {
-                rp_debug_printf(RP_DBG_STREAM_WARNING,
+                rp_debugf(RP_DBG_STREAM_WARNING,
                                 "Trying to free timer subsystem "
                                 "even though it is already freed.\n", NULL);
                 return RP_FALSE;
@@ -110,3 +111,38 @@ rp_bool_t rp_timer_free(void)
 
         return RP_TRUE;
 }
+
+#else /* USE_TIMER */
+#include "rosepetal.h"
+
+rp_bool_t rp_timer_init(void)
+{
+        return RP_TRUE;
+}
+
+rp_u64_t rp_timer_get_nsec_raw(void)
+{
+        return 0L;
+}
+
+rp_u64_t rp_timer_get_nsec(void)
+{
+        return 0L;
+}
+
+rp_f64_t rp_timer_get_sec64(void)
+{
+        return 0.;
+}
+
+rp_f32_t rp_timer_get_sec(void)
+{
+        return 0.f;
+}
+
+rp_bool_t rp_timer_free(void)
+{
+        return RP_TRUE;
+}
+
+#endif /* USE_TIMER */

@@ -39,10 +39,10 @@ enum { RP_FALSE, RP_TRUE };
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wvariadic-macros"
 #ifdef USE_DEBUGGER
-#define rp_debug_printf(STREAM, FMT, ...) \
-        rp_debug_printf_ex(__FILE__, __LINE__, STREAM, FMT, __VA_ARGS__)
+#define rp_debugf(STREAM, FMT, ...) \
+        rp_debugf_ex(__FILE__, __LINE__, STREAM, FMT, __VA_ARGS__)
 #else
-#define rp_debug_printf(STREAM, FMT, ...)
+#define rp_debugf(STREAM, FMT, ...)
 #endif
 #pragma GCC diagnostic pop
 
@@ -58,10 +58,9 @@ enum rp_deb_stream {
 rp_bool_t rp_debug_init(FILE *info_stream,
                         FILE *warning_stream,
                         FILE *error_stream);
-/* TODO: Rename this to `rp_debugf` since it's easier to remember and type. */
-rp_bool_t rp_debug_printf_ex(const char *file, const int line,
-                             const enum rp_deb_stream stream,
-                             const char *fmt, ...);
+rp_bool_t rp_debugf_ex(const char *file, const int line,
+                       const enum rp_deb_stream stream,
+                       const char *fmt, ...);
 rp_bool_t rp_debug_free(void);
 
 /*********
