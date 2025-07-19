@@ -11,23 +11,23 @@
 #define DBG_STREAM_WARNING_FALLBACK stdout
 #define DBG_STREAM_ERROR_FALLBACK   stderr
 
-static FILE     *debug_streams[RP_DBG_STREAM_CNT];
-static rp_bool_t debug_is_init = RP_FALSE;
+static FILE     *rp_debug_streams[RP_DBG_STREAM_CNT];
+static rp_bool_t rp_debug_is_init = RP_FALSE;
 
 rp_bool_t rp_debug_init(RP_DBG_ARG FILE *info_stream,
                         RP_DBG_ARG FILE *warning_stream,
                         RP_DBG_ARG FILE *error_stream)
 {
-        if (debug_is_init) {
+        if (rp_debug_is_init) {
                 fprintf(stderr, "ERROR: Trying to call `rp_debug_init()` "
                                 "when it's already initialized.\n");
                 return RP_FALSE;
         }
 
-        debug_streams[RP_DBG_STREAM_INFO]    = info_stream;
-        debug_streams[RP_DBG_STREAM_WARNING] = warning_stream;
-        debug_streams[RP_DBG_STREAM_ERROR]   = error_stream;
-        debug_is_init                        = RP_TRUE;
+        rp_debug_streams[RP_DBG_STREAM_INFO]    = info_stream;
+        rp_debug_streams[RP_DBG_STREAM_WARNING] = warning_stream;
+        rp_debug_streams[RP_DBG_STREAM_ERROR]   = error_stream;
+        rp_debug_is_init                        = RP_TRUE;
 
         return RP_TRUE;
 }
@@ -46,7 +46,17 @@ rp_bool_t rp_debugf_ex(RP_DBG_ARG const char *file,
                 "\x1b[0;31mERROR  \x1b[0m"
         };
 
-        strm = debug_streams[stream];
+        if (!rp_debug_is_init) {
+                fprintf(DBG_STREAM_ERROR_FALLBACK,
+                                "ERROR: Rose Petal's debug module has not been"
+                                " initialized. Make sure you've called "
+                                "`rp_debug_init()` before trying to use the "
+                                "`rp_debugf()` function. (%s:%d)\n",
+                        file, line);
+                return RP_FALSE;
+        }
+
+        strm = rp_debug_streams[stream];
         if (!strm) {
                 fprintf(DBG_STREAM_ERROR_FALLBACK,
                         "`rp_debugf()`: Trying to "
@@ -81,16 +91,16 @@ rp_bool_t rp_debug_free(void)
 {
         rp_u8_t i;
 
-        if (!debug_is_init) {
+        if (!rp_debug_is_init) {
                 fprintf(stderr, "ERROR: Trying to call `rp_debug_free()` "
                                 "when it's already freed.\n");
                 return RP_FALSE;
         }
 
         for (i = 0; i < RP_DBG_STREAM_CNT; ++i)
-                debug_streams[i] = NULL;
+                rp_debug_streams[i] = NULL;
 
-        debug_is_init = RP_FALSE;
+        rp_debug_is_init = RP_FALSE;
 
         return RP_TRUE;
 }
