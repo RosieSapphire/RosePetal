@@ -1,7 +1,16 @@
+
 # 🌹Rose Petal🌹
 Rose Petal is an API I am writing to serve as something of a base-layer for many programs I may write in the future. It consists of multiple different modules that get built into static libraries that are then linked with whatever program you want.
 
 I decided to go with static libraries since this is mean to be small and compact, and you can only link the modules that you need and leave out all the crap that you don't. I also just really don't like the "header-only" style of APIs since I find them to both be really ugly and extremely cumbersome to work with, although a lot of people feel the same way about linking libraries, so you can't please everyone. lmfao
+
+> Quick Links
+> [Modules](#modules)
+> - [rose_petal.h](#rose_petal.h)
+> - [rp_assert.h](#rp_assert.h)
+> - [rp_memory.h](#rp_memory.h)
+>
+> [Building](#building)
 
 # Modules
 ## rose_petal.h
@@ -33,3 +42,6 @@ One idea I had was that instead of it re-ordering the internal array after every
 That way it doesn't perpetually slow down when trying to re-order the memory after every free, but it also doesn't bog the program down with reallocations of the internal array, since it doubles-up on the memory pool every time it hits the limit, causing it to happen exponentially less frequently as more memory is allocated.
 
 There is also a `rp_mem_free_all()` function that frees all the memory currently being kept track of. This *can* be used as a substitute for actually managing your memory (like you fucking should), but I'd advise against that and use it more as a last resort, although, that's really up to you.
+
+# Building
+TODO: Unimplemented. lol
