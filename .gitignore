@@ -1,9 +1,6 @@
 # dirs
-.ccls-cache/
 .cache/
 build/
 
 # files
-rosepetal_test
-librosepetal.a
 compile_commands.json
