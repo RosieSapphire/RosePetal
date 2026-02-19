@@ -4,11 +4,11 @@ Rose Petal is an API I am writing to serve as something of a base-layer for many
 I decided to go with static libraries since this is mean to be small and compact, and you can only link the modules that you need and leave out all the crap that you don't. I also just really don't like the "header-only" style of APIs since I find them to both be really ugly and extremely cumbersome to work with, although a lot of people feel the same way about linking libraries, so you can't please everyone. lmfao
 
 # Modules
-## `rose_petal.h`
+## rose_petal.h
 This is not really a module and more of a catch-all that includes all the below-specified modules. This is generally ill-advised since the whole point is for it to be minimal and you should only include the stuff you're actually going to use, but if it comes down to it and it's easier in your project and you don't care about size, then go ahead.
 
 __NOTE: You will need to link any libraries that it depends upon, so be weary.__
-## `rp_assert.h`
+## rp_assert.h
 This is just a janky-ass custom assertion module I wrote for being able to write out custom messages to the terminal when asserting something, instead of it just saying that an assertion failed and that's it. It also mitigates having to do that butt-fucking-ugly method of doing `assert(condition && "String about your assertion");` because let's be honest that's FUCKING DOG SHIT!
 
 Other than that, it's pretty simple and has 3 main macros that are used:
@@ -21,7 +21,7 @@ This one does the same as above, but it allows you to specify a custom message w
 
 ### `RP_ASSERTF(cond, fmt, ...)`
 THIS is the one you wanna call when you have a format string you want to output alongside your assertion. This is EXTREMELY handy for actually knowing WHY your code is crashing and makes debugging marginally easier (at least in my opinion, hence why I added it. lmao)
-## `rp_memory.h`
+## rp_memory.h
 This module is responsible for providing a custom memory allocator. It's a bit rough around the edges, but it's mainly for debugging purposes and wouldn't usually be used in a final shipping product, so whatever.
 
 The idea is that you can either call the `rp_mem_alloc()` and `rp_mem_free()` functions directly to make an explicit link between them, or you can enable the `RP_MEM_WRAP_STD` macro to have it wrap any calls to `malloc()` and `free()` such that when the memory debugger is disabled, it will just use regular calls to malloc and free.
