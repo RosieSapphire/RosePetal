@@ -23,15 +23,14 @@ LIB_FILE_A  := $(DIR_BUILD)/librmw.a
 # Test-specific
 TEST_FILE_ELF := $(DIR_BUILD)/test.elf
 TEST_FILE_C   := test.c
-TEST_FILE_O   := test.o
+TEST_FILE_O   := $(DIR_BUILD)/test.o
 
 # For linking the library to the test program
 TEST_FLAGS_LINK := -L $(DIR_BUILD) -l$(LIB_FILE_A:$(DIR_BUILD)/lib%.a=%)
 
 # C stuff
 CC     := clang
-CFLAGS := -Weverything -Wno-unsafe-buffer-usage \
-	  -Wno-format-nonliteral -Wno-gnu-zero-variadic-macro-arguments \
+CFLAGS := -Weverything -Wno-unsafe-buffer-usage -Wno-format-nonliteral \
 	  -pedantic -std=c99 -I$(DIR_RP_INCLUDE) \
 	  -DRP_MEM_MAX_ALLOC_CNT=$(RP_MEM_MAX_ALLOC_CNT) \
 	  -DRP_MEM_DEBUG_PRINTF=$(RP_MEM_DEBUG_PRINTF)
