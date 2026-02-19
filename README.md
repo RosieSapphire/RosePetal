@@ -1,16 +1,11 @@
-
 # 🌹Rose Petal🌹
 Rose Petal is an API I am writing to serve as something of a base-layer for many programs I may write in the future. It consists of multiple different modules that get built into static libraries that are then linked with whatever program you want.
 
 I decided to go with static libraries since this is mean to be small and compact, and you can only link the modules that you need and leave out all the crap that you don't. I also just really don't like the "header-only" style of APIs since I find them to both be really ugly and extremely cumbersome to work with, although a lot of people feel the same way about linking libraries, so you can't please everyone. lmfao
 
 > Quick Links
-> [Modules](#modules)
-> - [rose_petal.h](#rose_petal.h)
-> - [rp_assert.h](#rp_assert.h)
-> - [rp_memory.h](#rp_memory.h)
->
-> [Building](#building)
+[Modules](#modules)
+[Building](#building)
 
 # Modules
 ## rose_petal.h
