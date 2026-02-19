@@ -1,29 +1,25 @@
-RMW_DIR        ?= ../rose_memory_wrapper
-RMW_INC_FLAGS  := -I$(RMW_DIR)/include
-RMW_STATIC_LIB := librmw.a
-RMW_LNK_FLAGS  := -L $(RMW_DIR)/build $(RMW_STATIC_LIB:lib%.a=-l%)
-
-O_FILE := main.o
-
 CC     := clang
-CFLAGS := -Weverything -Wno-unsafe-buffer-usage -Werror \
-	  -Wno-double-promotion -Wno-float-equal -pedantic \
-	  -std=c99 $(RMW_INC_FLAGS)
+CFLAGS := -Weverything -Wno-unsafe-buffer-usage -Werror -Wno-double-promotion \
+	  -Wno-float-equal -Wno-format-nonliteral -pedantic \
+	  -std=c99 -I../include
 
-PROG := testing_program
+.PHONY: test clean
 
-.PHONY: all clean
+build/librp_window.a: build/window.o
+	@ar rcs -o $@ $<
+	@echo "    [AR] $@ <- $^"
 
-all: $(PROG)
+test: build/test.elf
 
-$(PROG): $(O_FILE) $(RMW_STATIC_LIB)
-	$(CC) $(CFLAGS) -o $@ $< $(RMW_LNK_FLAGS)
+build/test.elf: build/test.o build/librp_window.a
+	@mkdir -p $(dir $@)
+	@$(CC) $(CFLAGS) -o $@ $< -lglfw -L build -lrp_window
+	@echo "    [LD] $@ <- $^"
 
-$(RMW_STATIC_LIB):
-	make -C $(RMW_DIR) -B -j
-
-%.o: %.c
-	$(CC) $(CFLAGS) -o $@ -c $<
+build/%.o: %.c
+	@mkdir -p $(dir $@)
+	@$(CC) $(CFLAGS) -o $@ -c $<
+	@echo "    [CC] $< -> $@"
 
 clean:
-	rm -rf $(O_FILE) $(PROG) compile_commands.json
+	rm -rf build compile_commands.json
