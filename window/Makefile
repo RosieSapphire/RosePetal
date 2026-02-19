@@ -7,14 +7,14 @@ CFLAGS := -Weverything -Wno-unsafe-buffer-usage -Werror -Wno-double-promotion \
 
 build/librp_window.a: build/window.o
 	@ar rcs -o $@ $<
-	@echo "    [AR] $@ <- $^"
+	@echo "Window Submodule Library built successfully!"
 
 test: build/test.elf
 
 build/test.elf: build/test.o build/librp_window.a
 	@mkdir -p $(dir $@)
 	@$(CC) $(CFLAGS) -o $@ $< -lglfw -L build -lrp_window
-	@echo "    [LD] $@ <- $^"
+	@echo "Window Submodule Test built successfully!"
 
 build/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -22,4 +22,5 @@ build/%.o: %.c
 	@echo "    [CC] $< -> $@"
 
 clean:
-	rm -rf build compile_commands.json
+	@rm -rf build compile_commands.json
+	@echo "Cleaning Window Submodule..."

@@ -10,28 +10,10 @@ RP_MEM_DEBUG_PRINTF := 1 # TODO: Write this to a log file instead!
 # NOTE: THIS MUST BE A POWER OF 2!
 RP_MEM_MAX_ALLOC_CNT := 4096
 
-# General
-DIR_BUILD      := build
-DIR_RP_ROOT    ?= ..
-DIR_RP_INCLUDE := $(DIR_RP_ROOT)/include
-
-# Library-specific
-LIB_FILES_C := memory.c
-LIB_FILES_O := $(LIB_FILES_C:%.c=$(DIR_BUILD)/%.o)
-LIB_FILE_A  := $(DIR_BUILD)/librmw.a
-
-# Test-specific
-TEST_FILE_ELF := $(DIR_BUILD)/test.elf
-TEST_FILE_C   := test.c
-TEST_FILE_O   := $(DIR_BUILD)/test.o
-
-# For linking the library to the test program
-TEST_FLAGS_LINK := -L $(DIR_BUILD) -l$(LIB_FILE_A:$(DIR_BUILD)/lib%.a=%)
-
 # C stuff
 CC     := clang
 CFLAGS := -Weverything -Wno-unsafe-buffer-usage -Wno-format-nonliteral \
-	  -pedantic -std=c99 -I$(DIR_RP_INCLUDE) \
+	  -pedantic -std=c99 -I../include \
 	  -DRP_MEM_MAX_ALLOC_CNT=$(RP_MEM_MAX_ALLOC_CNT) \
 	  -DRP_MEM_DEBUG_PRINTF=$(RP_MEM_DEBUG_PRINTF)
 
@@ -44,23 +26,27 @@ endif
 
 
 # The library itself
-$(LIB_FILE_A): $(LIB_FILES_O)
+build/librp_memory.a: build/memory.o
 	@mkdir -p $(dir $@)
-	ar rcs $@ $^
+	@ar rcs $@ $^
+	@echo "Memory Submodule Library built successfully!"
 
 # Test program
-test: $(TEST_FILE_ELF)
+test: build/test.elf
 
-$(TEST_FILE_ELF): $(TEST_FILE_O) $(LIB_FILE_A)
-	$(CC) $(CFLAGS) -o $@ $< $(TEST_FLAGS_LINK)
+build/test.elf: build/test.o build/librp_memory.a
+	@$(CC) $(CFLAGS) -o $@ $< -L build -lrp_memory
+	@echo "Memory Submodule test built successfully!"
 
 # Compiling to object files
-$(DIR_BUILD)/%.o: %.c
+build/%.o: %.c
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -o $@ -c $<
+	@$(CC) $(CFLAGS) -o $@ -c $<
+	@echo "    [CC] $@ <- $<"
 
 # Clean any previous build (if applicable)
 clean:
-	rm -rf $(DIR_BUILD) compile_commands.json
+	@rm -rf build compile_commands.json
+	@echo "Cleaning Memory Submodule..."
 
 .PHONY: test clean
