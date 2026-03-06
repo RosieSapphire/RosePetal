@@ -1,0 +1,8 @@
+# dirs
+.cache/
+
+# files
+*.optimized
+*.elf
+*.o
+*.json
