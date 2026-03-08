@@ -9,14 +9,21 @@
 
 /****************************************************
  * TODO:                                            *
- * - Implement file and line debugging              *
- * - Implement a free-list for double-free checking *
+ * > Implement file and line debugging              *
+ * > Implement a free-list for double-free checking *
+ * > Make this into a header-only library.          *
+ *   Not ideal, obviously, but extremely portable.  *
  ****************************************************/
 
 #undef mem_init
 #undef mem_alloc
 #undef mem_free
 #undef mem_terminate
+
+#ifdef MEMORY_ALLOCATOR_WRAP_STDLIB
+#undef malloc
+#undef free
+#endif /* #ifdef MEMORY_ALLOCATOR_WRAP_STDLIB */
 
 enum mem_verify_result {
 	MVR_INVALID_RESULT = -6,
@@ -37,6 +44,8 @@ static struct memory {
 	struct block *arr;
 	size_t	      cnt;
 } memory;
+
+static bool_t is_init = FALSE;
 
 /*********************
  * PRIVATE FUNCTIONS *
@@ -286,7 +295,10 @@ _mem_block_pointer_free(struct block *s, const char *file, const int line)
 
 void _mem_init_internal(const char *file, const int line)
 {
-	assert(!memory.cnt && !memory.arr);
+	assert(!memory.cnt);
+	assert(!memory.arr);
+	assert(!is_init);
+	is_init = TRUE;
 	_mem_debugf("INITIALIZED SUCCESSFULLY @ %s:%d.\n", file, line);
 }
 
@@ -294,6 +306,8 @@ void *_mem_alloc_internal(const size_t sz, const char *file, const int line)
 {
 	struct block *s = NULL;
 	void	     *p = NULL;
+
+	assert(is_init);
 
 	assert(sz);
 
@@ -317,6 +331,8 @@ void _mem_free_internal(void *ptr, const char *file, const int line)
 {
 	struct block *s;
 
+	assert(is_init);
+
 	assert(ptr);
 
 	s = _mem_block_from_pointer(ptr, file, line);
@@ -329,6 +345,11 @@ void _mem_free_internal(void *ptr, const char *file, const int line)
 void _mem_terminate_internal(const char *file, const int line)
 {
 	size_t i;
+
+	assert(is_init);
+
+	assert(file);
+	assert(line >= 0);
 
 	for (i = 0ul; i < memory.cnt; ++i) {
 		struct block		    *s = _mem_block_get(i, file, line);
@@ -350,6 +371,8 @@ void _mem_terminate_internal(const char *file, const int line)
 			    69);
 		_mem_block_pointer_free(s, file, line);
 	}
+
+	is_init = FALSE;
 
 	_mem_debugf("TERMINATED SUCCESSFULLY @ %s:%d.\n", file, line);
 }

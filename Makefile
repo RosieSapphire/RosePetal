@@ -1,4 +1,4 @@
-DEBUG ?=
+DEBUG ?= 1
 DEBUG_VERBOSE ?=
 
 # Library
