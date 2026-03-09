@@ -6,11 +6,10 @@
 
 #include "memory_allocator.h"
 #include "boolean.h"
+#include "int_types.h"
 
 /******************************************************************************
  * TODO:                                                                      *
- *                                                                            *
- * > Implement file and line debugging                                        *
  *                                                                            *
  * > Implement a free-list for double-free checking                           *
  *                                                                            *
@@ -46,18 +45,25 @@
 #endif /* #ifdef MEMORY_ALLOCATOR_WRAP_STDLIB */
 
 enum mem_verify_result {
-	MVR_INVALID_RESULT = -6,
+	MVR_INVALID_RESULT = -10,
 	MVR_FAIL_0_SLOTS_CNT,
 	MVR_FAIL_INDEX_TOO_HIGH,
 	MVR_FAIL_NULL_SLOTS_ARR,
 	MVR_FAIL_PTR_NULL_WITH_SIZE,
+	MVR_FAIL_PTR_NULL_WITH_FILE,
+	MVR_FAIL_PTR_NULL_WITH_LINE,
 	MVR_FAIL_PTR_NON_NULL_NO_SIZE,
+	MVR_FAIL_PTR_NON_NULL_NO_FILE,
+	MVR_FAIL_PTR_NON_NULL_NO_LINE,
 	MVR_SUCCESS
 };
 
 struct block {
-	void  *ptr;
-	size_t sz;
+	const char *file;
+	void	   *ptr;
+	size_t	    sz;
+	u32	    line; /* If your file has anywhere near 4294967295 lines,
+			     I think you're already pretty fucked, bucko... */
 };
 
 static struct memory {
@@ -201,25 +207,103 @@ _mem_block_verify(const size_t ind, const char *file, const int line)
 	if (!memory.cnt)
 		GOTO_END(MVR_FAIL_0_SLOTS_CNT);
 
+#ifdef ALLOCATOR_DEBUG_VERBOSE
+	_mem_debugf("Block %lu: Allocator has block count. %s:%d\n",
+		    ind,
+		    file,
+		    line);
+#endif /* #ifdef ALLOCATOR_DEBUG_VERBOSE */
+
 	if (ind >= memory.cnt)
 		GOTO_END(MVR_FAIL_INDEX_TOO_HIGH);
 
+#ifdef ALLOCATOR_DEBUG_VERBOSE
+	_mem_debugf("Block %lu: Index is within range. %s:%d\n",
+		    ind,
+		    file,
+		    line);
+#endif /* #ifdef ALLOCATOR_DEBUG_VERBOSE */
+
 	if (!memory.arr)
 		GOTO_END(MVR_FAIL_NULL_SLOTS_ARR);
+
+#ifdef ALLOCATOR_DEBUG_VERBOSE
+	_mem_debugf("Block %lu: Allocator has an array. %s:%d\n",
+		    ind,
+		    file,
+		    line);
+#endif /* #ifdef ALLOCATOR_DEBUG_VERBOSE */
 
 	s = _mem_block_get(ind, file, line);
 
 	/* If our pointer is NULL, the rest of our data better match! */
 	if (!s->ptr) {
-		if (!s->sz)
-			GOTO_END(MVR_SUCCESS);
+		if (s->sz)
+			GOTO_END(MVR_FAIL_PTR_NULL_WITH_SIZE);
 
-		GOTO_END(MVR_FAIL_PTR_NULL_WITH_SIZE);
+#ifdef ALLOCATOR_DEBUG_VERBOSE
+		_mem_debugf("Block %lu: No ptr; No size. %s:%d\n",
+			    ind,
+			    file,
+			    line);
+#endif /* #ifdef ALLOCATOR_DEBUG_VERBOSE */
+
+		if (s->file)
+			GOTO_END(MVR_FAIL_PTR_NULL_WITH_FILE);
+
+#ifdef ALLOCATOR_DEBUG_VERBOSE
+		_mem_debugf("Block %lu: No ptr; No file. %s:%d\n",
+			    ind,
+			    file,
+			    line);
+#endif /* #ifdef ALLOCATOR_DEBUG_VERBOSE */
+
+		if (s->line != UINT32_MAX)
+			GOTO_END(MVR_FAIL_PTR_NULL_WITH_LINE);
+
+#ifdef ALLOCATOR_DEBUG_VERBOSE
+		_mem_debugf("Block %lu: No ptr; No line. %s:%d\n",
+			    ind,
+			    file,
+			    line);
+#endif /* #ifdef ALLOCATOR_DEBUG_VERBOSE */
+
+		GOTO_END(MVR_SUCCESS);
 	}
 
 	/* Same for if it's non-NULL, just in the other direction. */
 	if (!s->sz)
 		GOTO_END(MVR_FAIL_PTR_NON_NULL_NO_SIZE);
+
+#ifdef ALLOCATOR_DEBUG_VERBOSE
+	_mem_debugf("Block %lu: Has ptr; Has size (%lu). %s:%d\n",
+		    ind,
+		    s->sz,
+		    file,
+		    line);
+#endif /* #ifdef ALLOCATOR_DEBUG_VERBOSE */
+
+	if (!s->file)
+		GOTO_END(MVR_FAIL_PTR_NON_NULL_NO_FILE);
+
+#ifdef ALLOCATOR_DEBUG_VERBOSE
+	_mem_debugf("Block %lu: Has ptr; Has file (\"%s\"). %s:%d\n",
+		    ind,
+		    s->file,
+		    file,
+		    line);
+#endif /* #ifdef ALLOCATOR_DEBUG_VERBOSE */
+
+	if (s->line == UINT32_MAX)
+		GOTO_END(MVR_FAIL_PTR_NON_NULL_NO_LINE);
+
+#ifdef ALLOCATOR_DEBUG_VERBOSE
+	_mem_debugf("Block %lu: Has ptr; Has line (%lu). %s:%d\n",
+		    ind,
+		    s->line,
+		    file,
+		    line);
+#endif /* #ifdef ALLOCATOR_DEBUG_VERBOSE */
 
 	GOTO_END(MVR_SUCCESS);
 
@@ -262,7 +346,11 @@ static void _mem_block_exit_if_error(const enum mem_verify_result r,
 		"Index is too high",
 		"Allocator slots array is NULL",
 		"Has NULL pointer, but has >= 0 size",
+		"Has NULL pointer, but has non-NULL file",
+		"Has NULL pointer, but has non-UINT32_MAX line",
 		"Pointer is non-NULL, but size is 0",
+		"Pointer is non-NULL, but file is NULL",
+		"Pointer is non-NULL, but line is UINT32_MAX",
 		"Success"
 	};
 	const char *msg = NULL;
@@ -395,8 +483,10 @@ static void _mem_block_pointer_free(struct block *s,
 	}
 
 	free(s->ptr);
-	s->ptr = NULL;
-	s->sz  = 0ul;
+	s->ptr	= NULL;
+	s->sz	= 0ul;
+	s->file = NULL;
+	s->line = UINT32_MAX;
 }
 
 /*
@@ -501,13 +591,21 @@ static void _mem_atexit(void)
 	size_t	i, active_cnt = SIZE_MAX;
 	size_t *active_index_arr = NULL;
 
-	assert(flags & FLAG_IS_INIT);
+	if (!(flags & FLAG_IS_INIT)) {
+		assert(!memory.arr);
+		assert(!memory.cnt);
+		_mem_debugf("No memory was allocated in this "
+			    "program; nothing to report.\n");
+		exit(EXIT_SUCCESS);
+	}
 
 	active_index_arr = _mem_active_block_indices_get(&active_cnt,
 							 __FILE__,
 							 __LINE__);
 	if (!active_cnt) {
 		assert(!active_index_arr);
+		_mem_debugf("\n");
+		_mem_debugf("NO BLOCKS LEFT ACTIVE AT EXIT; GOOD JOB!\n");
 		goto finish_terminate;
 	}
 
@@ -532,8 +630,8 @@ static void _mem_atexit(void)
 			    s->ptr,
 			    s->sz,
 			    _mem_block_get_index(s, __FILE__, __LINE__),
-			    "some_file.c",
-			    42069);
+			    s->file,
+			    s->line);
 		_mem_block_pointer_free(s, TRUE, __FILE__, __LINE__);
 	}
 
@@ -612,8 +710,10 @@ void *_mem_alloc_internal(const size_t sz, const char *file, const int line)
 	s = _mem_block_first_empty_get(file, line);
 	p = malloc(sz);
 	assert(p);
-	s->ptr = p;
-	s->sz  = sz;
+	s->ptr	= p;
+	s->sz	= sz;
+	s->file = file;
+	s->line = line;
 
 	_mem_debugf("mem_alloc(%lu) -> <%p> %s:%d\n", sz, p, file, line);
 
