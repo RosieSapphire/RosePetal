@@ -29,7 +29,7 @@ BUILD_FILES := $(PROG_ELF) $(TEST_O) $(LIB_O) *.json .cache/
 WARN_IGNORE := -Wno-format-nonliteral -Wno-reserved-macro-identifier \
 	       -Wno-reserved-identifier
 
-CC     := gcc
+CC     := clang
 CFLAGS := -Wall -Wextra -Werror -pedantic -ansi $(WARN_IGNORE)
 
 ifdef DEBUG
@@ -39,7 +39,7 @@ ifdef DEBUG
 		CFLAGS += -DALLOCATOR_DEBUG_VERBOSE
 	endif
 else
-	CFLAGS += -O3 -g0 -fdump-tree-optimized -DNDEBUG
+	CFLAGS += -O3 -g0 -DNDEBUG
 endif
 
 all: $(PROG_ELF)

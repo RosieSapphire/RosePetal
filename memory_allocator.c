@@ -5,8 +5,7 @@
 #include <stdarg.h>
 
 #include "memory_allocator.h"
-#include "boolean.h"
-#include "int_types.h"
+#include "types.h"
 
 /******************************************************************************
  * TODO:                                                                      *
@@ -133,38 +132,6 @@ static struct block *_mem_block_get_last(const char *file, const int line)
 	assert(memory.arr);
 
 	return _mem_block_get(memory.cnt - 1, file, line);
-}
-
-/*
- * Safely gets and returns the index of a specified memory block `s`
- * within the allocator's array.
- *
- * Effectively the counterpart to `_mem_block_get()`
- * which returns a pointer FROM an index; this
- * one converts a pointer TO an index.
- */
-static size_t
-_mem_block_get_index(const struct block *s, const char *file, const int line)
-{
-	size_t ind = SIZE_MAX;
-
-	assert(memory.cnt);
-	assert(memory.arr);
-	assert(s);
-
-	ind = (size_t)(s - memory.arr);
-	assert(ind < memory.cnt);
-
-#ifdef ALLOCATOR_DEBUG_VERBOSE
-	_mem_debugf("Block pointer <%p> is index %lu in memory array.\n",
-		    file,
-		    line);
-#else  /* #ifdef ALLOCATOR_DEBUG_VERBOSE */
-	(void)file;
-	(void)line;
-#endif /* #ifdef ALLOCATOR_DEBUG_VERBOSE #else */
-
-	return ind;
 }
 
 /*
@@ -624,12 +591,10 @@ static void _mem_atexit(void)
 		if (!s->ptr)
 			continue;
 
-		_mem_debugf("\tLEAK %lu: [p:<%p> sz:%lu sl:%lu] "
-			    "%s:%lu\n",
+		_mem_debugf("\tLEAK %lu: [p:<%p> sz:%lu] %s:%u\n",
 			    i,
 			    s->ptr,
 			    s->sz,
-			    _mem_block_get_index(s, __FILE__, __LINE__),
 			    s->file,
 			    s->line);
 		_mem_block_pointer_free(s, TRUE, __FILE__, __LINE__);
