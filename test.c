@@ -7,12 +7,14 @@
 #define MEMORY_ALLOCATOR_WRAP_STDLIB
 #include "memory_allocator.h"
 
-#define PTR_TEST_CNT 50ul
+#define PTR_TEST_CNT 500ul
 
 /*
  * Randomly frees only some of the blocks to simulate a lazy-ass programmer
  */
+#if 1
 #define FREE_PARTIAL
+#endif
 
 static u32 *ptr_test[PTR_TEST_CNT] = { NULL };
 
@@ -36,8 +38,8 @@ int main(void)
 		ptr_test[i] = (u32 *)malloc(sizeof(**ptr_test) * num);
 		assert(ptr_test[i]);
 
-		/* 50% of the time, just continue like normal */
-		if (random_bool()) {
+		/* 2/3 of the time, just continue like normal */
+		if (random_u32() % 3) {
 			for (j = 0ul; j < num; ++j)
 				*(ptr_test[i]) = random_u32();
 
@@ -45,7 +47,7 @@ int main(void)
 		}
 
 		/*
-		 * The other 50% of the time, go through all that's currently
+		 * The other 1/3 of the time, go through all that's currently
 		 * allocated, and randomly (another 50%) free those pointers.
 		 */
 		for (j = 0ul; j <= i; ++j) {
