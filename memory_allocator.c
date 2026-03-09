@@ -21,10 +21,6 @@
  *   I personally love crashing when shit goes wrong, since that forces me    *
  *   to fix it, but the general public doesn't seem to be a big fan. lol      *
  *                                                                            *
- * > `_mem_block_verify()` is _always_ called before a                        *
- *   subsequent call to `_mem_block_exit_if_error()`, so                      *
- *   these two functions should be concatonated into one.                     *
- *                                                                            *
  * > I think a cleaner implementation for how `_mem_atexit()` handles doing   *
  *   the whole free-all-the-blocks-left-over-by-the-user shtick is that,      *
  *   instead of allocating an indices array and indexing them that way, just  *
@@ -43,26 +39,13 @@
 #undef free
 #endif /* #ifdef MEMORY_ALLOCATOR_WRAP_STDLIB */
 
-enum mem_verify_result {
-	MVR_INVALID_RESULT = -10,
-	MVR_FAIL_0_SLOTS_CNT,
-	MVR_FAIL_INDEX_TOO_HIGH,
-	MVR_FAIL_NULL_SLOTS_ARR,
-	MVR_FAIL_PTR_NULL_WITH_SIZE,
-	MVR_FAIL_PTR_NULL_WITH_FILE,
-	MVR_FAIL_PTR_NULL_WITH_LINE,
-	MVR_FAIL_PTR_NON_NULL_NO_SIZE,
-	MVR_FAIL_PTR_NON_NULL_NO_FILE,
-	MVR_FAIL_PTR_NON_NULL_NO_LINE,
-	MVR_SUCCESS
-};
-
 struct block {
 	const char *file;
 	void	   *ptr;
 	size_t	    sz;
-	u32	    line; /* If your file has anywhere near 4294967295 lines,
+	u32	    line; /* If your file has anywhere NEAR 4294967295 lines,
 			     I think you're already pretty fucked, bucko... */
+	u32 _pad;
 };
 
 static struct memory {
@@ -70,14 +53,16 @@ static struct memory {
 	size_t	      cnt;
 } memory;
 
-enum internal_flags {
+enum {
 	FLAGS_NONE	  = 0,
 	FLAG_IS_INIT	  = (1 << 0),
 	FLAG_HAS_CALLBACK = (1 << 1),
 	FLAGS_MASK	  = (FLAG_IS_INIT | FLAG_HAS_CALLBACK)
 };
 
-static enum internal_flags flags = FLAGS_NONE;
+typedef u8 internal_flags_e;
+
+static internal_flags_e flags = FLAGS_NONE;
 
 /*********************
  * PRIVATE FUNCTIONS *
@@ -101,41 +86,73 @@ static void _mem_debugf(const char *fmt, ...)
 #endif /* #ifdef ALLOCATOR_DEBUG #else */
 }
 
-/*
- * Safely gets and returns the pointer to a memory block
- * at index `i` from the allocator with bounds checking.
- */
-static struct block *
-_mem_block_get(const size_t i, const char *file, const int line)
-{
-	assert(memory.cnt);
-	assert(memory.arr);
-	assert(i < memory.cnt);
+#define mem_assertf_ex(_cond, _file, _line, _fmt, ...)                         \
+	_mem_assertf_internal(!!(_cond),                                       \
+			      #_cond,                                          \
+			      _file,                                           \
+			      _line,                                           \
+			      _fmt,                                            \
+			      __VA_ARGS__)
+#define mem_assertm_ex(_cond, _file, _line, _fmt)                              \
+	_mem_assertf_internal(!!(_cond), #_cond, _file, _line, _fmt, NULL)
+#define mem_assertm(_cond, _fmt)                                               \
+	_mem_assertf_internal(!!(_cond), #_cond, __FILE__, __LINE__, _fmt, NULL)
+#define mem_assertf(_cond, _fmt, ...)                                          \
+	_mem_assertf_internal(!!(_cond),                                       \
+			      #_cond,                                          \
+			      __FILE__,                                        \
+			      __LINE__,                                        \
+			      _fmt,                                            \
+			      __VA_ARGS__)
 
-#ifdef ALLOCATOR_DEBUG_VERBOSE
-	_mem_debugf("Got block at index %lu @ %s:%d\n", i, file, line);
-#else  /* #ifdef ALLOCATOR_DEBUG_VERBOSE */
+#define ASSERT_MEM_ARR()                                                       \
+	do {                                                                   \
+		mem_assertm_ex(memory.cnt, file, line, "Memory count is 0");   \
+		mem_assertm_ex(memory.arr,                                     \
+			       file,                                           \
+			       line,                                           \
+			       "Memory array is NULL");                        \
+	} while (0)
+
+/*
+ * Effectively an assert wrapper that allows for a format string.
+ */
+static void _mem_assertf_internal(const bool_t cond,
+				  const char  *cond_str,
+				  const char  *file,
+				  const int    line,
+				  const char  *fmt,
+				  ...)
+{
+#ifdef ALLOCATOR_DEBUG
+	va_list args;
+
+	if (cond)
+		return;
+
+	assert(cond_str);
+	assert(fmt);
+	va_start(args, fmt);
+	(void)fprintf(stderr,
+		      "MEM: ASSERTION (%s) AT %s:%d FAILED: ",
+		      cond_str,
+		      file,
+		      line);
+	(void)vfprintf(stderr, fmt, args);
+	(void)fprintf(stderr, "\n");
+	va_end(args);
+	exit(EXIT_FAILURE);
+#else  /* #ifdef ALLOCATOR_DEBUG */
+	(void)cond;
+	(void)cond_str;
 	(void)file;
 	(void)line;
-#endif /* #ifdef ALLOCATOR_DEBUG_VERBOSE #else */
-
-	return memory.arr + i;
+	(void)fmt;
+#endif /* #ifdef ALLOCATOR_DEBUG #else */
 }
 
 /*
- * Safely gets and returns the pointer to the last block
- * at the end of the allocator memory block array.
- */
-static struct block *_mem_block_get_last(const char *file, const int line)
-{
-	assert(memory.cnt);
-	assert(memory.arr);
-
-	return _mem_block_get(memory.cnt - 1, file, line);
-}
-
-/*
- * Verifies that the state of a memory block at index `ind` is valid.
+ * Verifies that the state of a memory block pointer is valid.
  *
  * NOTE: It does NOT matter whether the pointer is active or not, per say.
  * Rather, depending on if it's `NULL` or not, all of the _rest_ of the data
@@ -155,242 +172,128 @@ static struct block *_mem_block_get_last(const char *file, const int line)
  * This would be the opposite case, since it has an
  * active pointer, but no size associated with it.
  */
-static enum mem_verify_result
-_mem_block_verify(const size_t ind, const char *file, const int line)
+static void
+_mem_block_verify(const struct block *b, const char *file, const int line)
 {
-#define GOTO_END(_code)                                                        \
-	do {                                                                   \
-		r = (_code);                                                   \
-		goto mem_verify_end;                                           \
-	} while (0)
+	size_t ind = SIZE_MAX;
 
-	struct block	      *s = NULL;
-	enum mem_verify_result r = MVR_INVALID_RESULT;
+	ASSERT_MEM_ARR();
+
+	mem_assertm_ex(b, file, line, "Block passed in is NULL");
+	ind = (size_t)(b - memory.arr);
+	mem_assertf_ex(ind < memory.cnt,
+		       file,
+		       line,
+		       "Index %lu is out of range! (Max is %lu)",
+		       ind,
+		       memory.cnt);
 
 #ifdef ALLOCATOR_DEBUG_VERBOSE
 	_mem_debugf("Verifying memory slot %lu\n", ind);
 #endif /* #ifdef ALLOCATOR_DEBUG_VERBOSE */
 
-	if (!memory.cnt)
-		GOTO_END(MVR_FAIL_0_SLOTS_CNT);
-
-#ifdef ALLOCATOR_DEBUG_VERBOSE
-	_mem_debugf("Block %lu: Allocator has block count. %s:%d\n",
-		    ind,
-		    file,
-		    line);
-#endif /* #ifdef ALLOCATOR_DEBUG_VERBOSE */
-
-	if (ind >= memory.cnt)
-		GOTO_END(MVR_FAIL_INDEX_TOO_HIGH);
-
-#ifdef ALLOCATOR_DEBUG_VERBOSE
-	_mem_debugf("Block %lu: Index is within range. %s:%d\n",
-		    ind,
-		    file,
-		    line);
-#endif /* #ifdef ALLOCATOR_DEBUG_VERBOSE */
-
-	if (!memory.arr)
-		GOTO_END(MVR_FAIL_NULL_SLOTS_ARR);
-
-#ifdef ALLOCATOR_DEBUG_VERBOSE
-	_mem_debugf("Block %lu: Allocator has an array. %s:%d\n",
-		    ind,
-		    file,
-		    line);
-#endif /* #ifdef ALLOCATOR_DEBUG_VERBOSE */
-
-	s = _mem_block_get(ind, file, line);
-
 	/* If our pointer is NULL, the rest of our data better match! */
-	if (!s->ptr) {
-		if (s->sz)
-			GOTO_END(MVR_FAIL_PTR_NULL_WITH_SIZE);
+	if (!b->ptr) {
+		mem_assertf_ex(!b->sz,
+			       file,
+			       line,
+			       "Block <%p>'s pointer is NULL, "
+			       "but size is greather than 0",
+			       b);
+		mem_assertf_ex(!b->file,
+			       file,
+			       line,
+			       "Block <%p>'s pointer is NULL, "
+			       "but file string is non-NULL",
+			       b);
+		mem_assertf_ex(b->line == UINT32_MAX,
+			       file,
+			       line,
+			       "Block <%p>'s pointer is NULL, but "
+			       "file's line number is not UINT32_MAX (%u)",
+			       b,
+			       UINT32_MAX);
 
-#ifdef ALLOCATOR_DEBUG_VERBOSE
-		_mem_debugf("Block %lu: No ptr; No size. %s:%d\n",
-			    ind,
-			    file,
-			    line);
-#endif /* #ifdef ALLOCATOR_DEBUG_VERBOSE */
-
-		if (s->file)
-			GOTO_END(MVR_FAIL_PTR_NULL_WITH_FILE);
-
-#ifdef ALLOCATOR_DEBUG_VERBOSE
-		_mem_debugf("Block %lu: No ptr; No file. %s:%d\n",
-			    ind,
-			    file,
-			    line);
-#endif /* #ifdef ALLOCATOR_DEBUG_VERBOSE */
-
-		if (s->line != UINT32_MAX)
-			GOTO_END(MVR_FAIL_PTR_NULL_WITH_LINE);
-
-#ifdef ALLOCATOR_DEBUG_VERBOSE
-		_mem_debugf("Block %lu: No ptr; No line. %s:%d\n",
-			    ind,
-			    file,
-			    line);
-#endif /* #ifdef ALLOCATOR_DEBUG_VERBOSE */
-
-		GOTO_END(MVR_SUCCESS);
+		return;
 	}
 
 	/* Same for if it's non-NULL, just in the other direction. */
-	if (!s->sz)
-		GOTO_END(MVR_FAIL_PTR_NON_NULL_NO_SIZE);
+	mem_assertf_ex(b->sz,
+		       file,
+		       line,
+		       "Block <%p>'s pointer <%p> "
+		       "is non-NULL, but size is 0",
+		       b,
+		       b->ptr);
+	mem_assertf_ex(b->file,
+		       file,
+		       line,
+		       "Block <%p>'s pointer <%p> is "
+		       "non-NULL, but file string is NULL",
+		       b,
+		       b->ptr);
+	mem_assertf_ex(b->line != UINT32_MAX,
+		       file,
+		       line,
+		       "Block <%p>'s pointer <%p> is non-NULL, "
+		       "but file's line number is UINT32_MAX (%u)",
+		       b,
+		       b->ptr,
+		       UINT32_MAX);
+}
+
+/*
+ * Safely gets and returns the pointer to a memory block
+ * at index `i` from the allocator with bounds checking.
+ *
+ * It also calls `_mem_block_verify()` in order to ensure the block is valid.
+ */
+static struct block *
+_mem_block_get(const size_t i, const char *file, const int line)
+{
+	struct block *b = NULL;
+
+	ASSERT_MEM_ARR();
+	mem_assertf_ex(i < memory.cnt,
+		       file,
+		       line,
+		       "Block index %lu is invalid! (Max is %lu)",
+		       i,
+		       memory.cnt);
 
 #ifdef ALLOCATOR_DEBUG_VERBOSE
-	_mem_debugf("Block %lu: Has ptr; Has size (%lu). %s:%d\n",
-		    ind,
-		    s->sz,
-		    file,
-		    line);
-#endif /* #ifdef ALLOCATOR_DEBUG_VERBOSE */
-
-	if (!s->file)
-		GOTO_END(MVR_FAIL_PTR_NON_NULL_NO_FILE);
-
-#ifdef ALLOCATOR_DEBUG_VERBOSE
-	_mem_debugf("Block %lu: Has ptr; Has file (\"%s\"). %s:%d\n",
-		    ind,
-		    s->file,
-		    file,
-		    line);
-#endif /* #ifdef ALLOCATOR_DEBUG_VERBOSE */
-
-	if (s->line == UINT32_MAX)
-		GOTO_END(MVR_FAIL_PTR_NON_NULL_NO_LINE);
-
-#ifdef ALLOCATOR_DEBUG_VERBOSE
-	_mem_debugf("Block %lu: Has ptr; Has line (%lu). %s:%d\n",
-		    ind,
-		    s->line,
-		    file,
-		    line);
-#endif /* #ifdef ALLOCATOR_DEBUG_VERBOSE */
-
-	GOTO_END(MVR_SUCCESS);
-
-mem_verify_end:
-#ifdef ALLOCATOR_DEBUG_VERBOSE
-	if (r == MVR_SUCCESS) {
-		_mem_debugf("Memory slot %lu is valid! %s:%d\n",
-			    ind,
-			    file,
-			    line);
-	}
+	_mem_debugf("Got block at index %lu @ %s:%d\n", i, file, line);
 #else  /* #ifdef ALLOCATOR_DEBUG_VERBOSE */
 	(void)file;
 	(void)line;
 #endif /* #ifdef ALLOCATOR_DEBUG_VERBOSE #else */
 
-	return r;
+	b = memory.arr + i;
+	_mem_block_verify(b, file, line);
 
-#undef GOTO_END
+	return b;
 }
 
 /*
- * Takes a memory block verify return code `r` and crashes the program
- * after printing out the description associated with said error code.
- *
- * NOTE: This function simply returns if the code happens to be `MVR_SUCCESS`,
- * as there is no earthy reason to crash if nothing went wrong. lol
+ * Safely gets and returns the pointer to the first block
+ * at the beginning of the allocator memory block array.
  */
-static void _mem_block_exit_if_error(const enum mem_verify_result r,
-				     const size_t		  i,
-				     const char			 *file,
-				     const int			  line)
+static struct block *_mem_block_get_first(const char *file, const int line)
 {
-#define MSG_ARR_LEN	     (-MVR_INVALID_RESULT + 1)
-#define MVR_TO_MSG_INDEX(_r) ((size_t)(_r + MSG_ARR_LEN - 1))
+	ASSERT_MEM_ARR();
 
-	const char *msg_arr[MSG_ARR_LEN] = {
-		"<INVALID RESULT>",
-		"Allocator has 0 slots",
-		"Index is too high",
-		"Allocator slots array is NULL",
-		"Has NULL pointer, but has >= 0 size",
-		"Has NULL pointer, but has non-NULL file",
-		"Has NULL pointer, but has non-UINT32_MAX line",
-		"Pointer is non-NULL, but size is 0",
-		"Pointer is non-NULL, but file is NULL",
-		"Pointer is non-NULL, but line is UINT32_MAX",
-		"Success"
-	};
-	const char *msg = NULL;
-
-	if (r == MVR_SUCCESS)
-		return;
-
-	assert(r >= MVR_INVALID_RESULT);
-	assert(r < MVR_SUCCESS);
-
-	msg = msg_arr[MVR_TO_MSG_INDEX(r)];
-
-	_mem_debugf("Memory slot %lu is invalid: \"%s\". Occured at %s:%d\n",
-		    i,
-		    msg,
-		    file,
-		    line);
-	exit(EXIT_FAILURE);
-
-#undef MVR_TO_MSG_INDEX
-#undef MSG_ARR_LEN
+	return _mem_block_get(0ul, file, line);
 }
 
 /*
- * Finds the first available empty memory block in the allocator's array.
- *
- * There are a few cases to this function:
- *	1. The allocator's array is NULL, as no blocks have previously
- *	   been allocated, and so it uses `malloc()` to initialize the
- *	   block array and returns that pointer, as it's the first element.
- *
- *	2. The allocator's array already has slots, but none of them are
- *	   available to assign to, so it allocates a brand new slot into
- *	   the array.
- *
- *	3. It goes through the allocator's array and
- *	   successfully finds an empty slot to use.
- *
- * Regardless of the outcome, unless the system is out of memory,
- * this function should _never_ return NULL.
+ * Safely gets and returns the pointer to the last block
+ * at the end of the allocator memory block array.
  */
-static struct block *_mem_block_first_empty_get(const char *file,
-						const int   line)
+static struct block *_mem_block_get_last(const char *file, const int line)
 {
-	struct block	      *s = NULL;
-	enum mem_verify_result r = MVR_INVALID_RESULT;
-	size_t		       i, newsz;
+	ASSERT_MEM_ARR();
 
-	assert(flags & FLAG_IS_INIT);
-	assert(file);
-	assert(line >= 0);
-
-	/* Search in the already-existing array for a free slot. */
-	for (i = 0ul; i < memory.cnt; ++i) {
-		s = _mem_block_get(i, file, line);
-		r = _mem_block_verify(i, file, line);
-		_mem_block_exit_if_error(r, i, file, line);
-
-		if (!s->ptr)
-			return s;
-	}
-
-	/* If we couldn't find one, allocate a new one and return it! */
-	newsz = sizeof(*memory.arr) * ++memory.cnt;
-	if (memory.cnt && memory.arr)
-		s = (struct block *)realloc(memory.arr, newsz);
-	else
-		s = (struct block *)malloc(newsz);
-
-	assert(s);
-	memory.arr = s;
-
-	return _mem_block_get_last(file, line);
+	return _mem_block_get(memory.cnt - 1ul, file, line);
 }
 
 /*
@@ -406,21 +309,42 @@ _mem_block_from_pointer(const void *ptr, const char *file, const int line)
 {
 	size_t i;
 
-	assert(memory.cnt && memory.arr);
+	ASSERT_MEM_ARR();
 
 	for (i = 0ul; i < memory.cnt; ++i) {
-		struct block		    *s = _mem_block_get(i, file, line);
-		const enum mem_verify_result r =
-				_mem_block_verify(i, file, line);
-
-		_mem_block_exit_if_error(r, i, file, line);
+		struct block *s = _mem_block_get(i, file, line);
 
 		if (s->ptr == ptr)
 			return s;
 	}
 
-	_mem_debugf("Failed to get memory slot from pointer <%p>\n", ptr);
-	exit(EXIT_FAILURE);
+	mem_assertf_ex(0,
+		       file,
+		       line,
+		       "Failed to get memory slot from pointer <%p>",
+		       ptr);
+	return NULL;
+}
+
+/*
+ * Helper function for zero-initializing a single memory block internally.
+ */
+static void _mem_block_set_empty(struct block *b)
+{
+	mem_assertm(memory.cnt, "Memory count is 0");
+	mem_assertm(memory.arr, "Memory array is NULL");
+
+	mem_assertm(b, "Block pointer is NULL");
+	mem_assertf((size_t)(b - memory.arr) < memory.cnt,
+		    "Block pointer <%p> is out of range of memory "
+		    "block array; (is %lu, should be less than %lu)",
+		    (size_t)(b - memory.arr),
+		    memory.cnt);
+
+	b->ptr	= NULL;
+	b->sz	= 0ul;
+	b->file = NULL;
+	b->line = UINT32_MAX;
 }
 
 /*
@@ -431,9 +355,9 @@ static void _mem_block_pointer_free(struct block *s,
 				    const char	 *file,
 				    const int	  line)
 {
-	assert(s);
-	assert(s->ptr);
-	assert(s->sz);
+	ASSERT_MEM_ARR();
+
+	_mem_block_verify(s, file, line);
 
 	/*
 	 * If this function was called from exit, it means that
@@ -450,10 +374,7 @@ static void _mem_block_pointer_free(struct block *s,
 	}
 
 	free(s->ptr);
-	s->ptr	= NULL;
-	s->sz	= 0ul;
-	s->file = NULL;
-	s->line = UINT32_MAX;
+	_mem_block_set_empty(s);
 }
 
 /*
@@ -519,12 +440,9 @@ _mem_active_block_indices_get(size_t *cnt_out, const char *file, const int line)
 	assert(arr);
 
 	for (i = 0ul; i < memory.cnt; ++i) {
-		const struct block	    *b = _mem_block_get(i, file, line);
-		const enum mem_verify_result r =
-				_mem_block_verify(i, file, line);
-		size_t *re = NULL;
+		const struct block *b  = _mem_block_get(i, file, line);
+		size_t		   *re = NULL;
 
-		_mem_block_exit_if_error(r, i, file, line);
 		if (!b->ptr)
 			continue;
 
@@ -583,10 +501,6 @@ static void _mem_atexit(void)
 		struct block *s = _mem_block_get(active_index_arr[i],
 						 __FILE__,
 						 __LINE__);
-		const enum mem_verify_result r =
-				_mem_block_verify(i, __FILE__, __LINE__);
-
-		_mem_block_exit_if_error(r, i, __FILE__, __LINE__);
 
 		if (!s->ptr)
 			continue;
@@ -609,6 +523,62 @@ finish_terminate:
 	_mem_debugf("TERMINATED SUCCESSFULLY!\n");
 }
 
+#if 0
+static __inline s32 _tmp_arr_sort(const void *a, const void *b)
+{
+	const s32 a8 = (s16)(*(const u8 *)a);
+	const s32 b8 = (s16)(*(const u8 *)b);
+	s32 r = INT32_MAX;
+
+	if (a8 > b8)
+		r = 1;
+	else if (a8 < b8)
+		r = -1;
+	else
+		r = 0;
+
+	_mem_debugf("sort res: %d\n", r);
+
+	return r;
+}
+#endif
+
+/*
+ * The comparison function necessary for the below function to work at all.
+ */
+static int _mem_block_null_cmp(const void *a, const void *b)
+{
+	const struct block *at = (const struct block *)a;
+	const struct block *bt = (const struct block *)b;
+
+#if 0
+	_mem_block_verify(at, __FILE__, __LINE__);
+	_mem_block_verify(bt, __FILE__, __LINE__);
+#endif
+
+	if (!at->ptr)
+		return -1;
+
+	if (!bt->ptr)
+		return 1;
+
+	return 0;
+}
+
+#if 0
+static __inline size_t rand_size(void)
+{
+	size_t r = 0ul;
+
+	r |= (size_t)(rand() & 0xFFFF) << 0ul;
+	r |= (size_t)(rand() & 0xFFFF) << 16ul;
+	r |= (size_t)(rand() & 0xFFFF) << 32ul;
+	r |= (size_t)(rand() & 0xFFFF) << 48ul;
+
+	return r;
+}
+#endif
+
 /*
  * This simply enables `FLAG_IS_INIT` in `flags`,
  * as that's all it really needs to do for now.
@@ -623,6 +593,98 @@ static void _mem_init(void)
 	assert(!(flags & FLAG_IS_INIT)); /* Make sure we didn't already */
 	flags |= FLAG_IS_INIT;
 	_mem_debugf("INITIALIZED SUCCESSFULLY!\n");
+}
+
+/*
+ * Internal helper function
+ */
+static __inline bool_t _mem_block_array_has_null_elements(const char *file,
+							  const int   line)
+{
+	size_t i;
+
+	for (i = 0ul; i < memory.cnt; ++i)
+		if (!_mem_block_get(i, file, line)->ptr)
+			return TRUE;
+
+	return FALSE;
+}
+
+/*
+ * Sorts the internal memory block array such that the unused slots
+ * are sorted towards the beginning and the non-NULL ones are at the
+ * end. That way it's easy to just allocate a new slot right at the
+ * beginning of the array instead of needing to search for it.
+ *
+ * Returns if the array needs to be (re)allocated.
+ */
+static void _mem_block_array_sort_null_first(const char *file, const int line)
+{
+	assert(file);
+	assert(line >= 0);
+
+	assert(memory.cnt);
+	assert(memory.arr);
+
+	if (!_mem_block_get_first(file, line)->ptr) {
+#ifdef ALLOCATOR_DEBUG_VERBOSE
+		_mem_debugf("First mem block is already NULL; "
+			    "no need to sort array.\n");
+#endif /* #ifdef ALLOCATOR_DEBUG_VERBOSE */
+		return;
+	}
+
+	qsort(memory.arr,
+	      memory.cnt,
+	      sizeof(*memory.arr),
+	      &_mem_block_null_cmp);
+
+#ifdef ALLOCATOR_DEBUG_VERBOSE
+	{
+		size_t i;
+
+		_mem_debugf("Sorted array, here's the results... %s:%d\n",
+			    file,
+			    line);
+		for (i = 0ul; i < memory.cnt; ++i) {
+			_mem_debugf("\t%lu: ptr = <%p>\n",
+				    i,
+				    _mem_block_get(i, file, line)->ptr);
+		}
+	}
+#endif /* #ifdef ALLOCATOR_DEBUG_VERBOSE */
+}
+
+/*
+ * To cut down on the amount of sorts needed to perform, get the last
+ * available NULL slot post-sort so that each subsequent one will make it
+ * so that if there are multiple, there will be no need to re-sort the array
+ * until all of the NULL slots have been taken up.
+ */
+static struct block *_mem_block_get_last_empty_post_sort(const char *file,
+							 const int   line)
+{
+	struct block *last_null = NULL;
+	size_t	      i;
+
+	ASSERT_MEM_ARR();
+
+	for (i = 0ul; i < memory.cnt; ++i) {
+		struct block *b = _mem_block_get(i, file, line);
+
+		if (!b->ptr)
+			last_null = b;
+	}
+
+	if (last_null)
+		return last_null;
+
+	mem_assertm_ex(0,
+		       file,
+		       line,
+		       "Failed to find any NULL slots in array post-sort");
+
+	return NULL;
 }
 
 /********************
@@ -672,13 +734,39 @@ void *_mem_alloc_internal(const size_t sz, const char *file, const int line)
 
 	assert(sz);
 
-	s = _mem_block_first_empty_get(file, line);
+	/* Call `malloc()` or `realloc()` on the array if necessary */
+	if (!_mem_block_array_has_null_elements(file, line)) {
+		const size_t  psz  = memory.cnt;
+		const size_t  nsz  = sizeof(*memory.arr) * ++memory.cnt;
+		struct block *last = NULL;
+		void	     *all  = NULL;
+
+		if (!psz) {
+			assert(!memory.arr);
+			all = malloc(nsz);
+		} else {
+			assert(memory.arr);
+			all = realloc(memory.arr, nsz);
+		}
+
+		assert(all);
+		memory.arr = (struct block *)all;
+
+		last = _mem_block_get_last(file, line);
+		assert(last);
+		_mem_block_set_empty(last);
+		_mem_block_verify(last, file, line);
+	}
+
+	_mem_block_array_sort_null_first(file, line);
+	s = _mem_block_get_last_empty_post_sort(file, line);
+	_mem_block_verify(s, file, line);
 	p = malloc(sz);
 	assert(p);
 	s->ptr	= p;
 	s->sz	= sz;
 	s->file = file;
-	s->line = line;
+	s->line = (u32)line;
 
 	_mem_debugf("mem_alloc(%lu) -> <%p> %s:%d\n", sz, p, file, line);
 

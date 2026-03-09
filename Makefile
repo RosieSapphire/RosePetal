@@ -27,10 +27,11 @@ BUILD_FILES := $(PROG_ELF) $(TEST_O) $(LIB_O) *.json .cache/
 # $(info BUILD_FILES : $(BUILD_FILES))
 
 WARN_IGNORE := -Wno-format-nonliteral -Wno-reserved-macro-identifier \
-	       -Wno-reserved-identifier
+	       -Wno-reserved-identifier -Wno-unsafe-buffer-usage \
+	       -Wno-variadic-macros
 
 CC     := clang
-CFLAGS := -Wall -Wextra -Werror -pedantic -ansi $(WARN_IGNORE)
+CFLAGS := -Wall -Wextra -Weverything -Werror -pedantic -ansi $(WARN_IGNORE)
 
 ifdef DEBUG
 	CFLAGS += -O0 -ggdb3 -fsanitize=address,leak,null \
