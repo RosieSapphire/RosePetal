@@ -275,17 +275,6 @@ _mem_block_get(const size_t i, const char *file, const int line)
 }
 
 /*
- * Safely gets and returns the pointer to the first block
- * at the beginning of the allocator memory block array.
- */
-static struct block *_mem_block_get_first(const char *file, const int line)
-{
-	ASSERT_MEM_ARR(file, line);
-
-	return _mem_block_get(0ul, file, line);
-}
-
-/*
  * Safely gets and returns the pointer to the last block
  * at the end of the allocator memory block array.
  */
@@ -455,62 +444,6 @@ finish_terminate:
 	_mem_debugf("TERMINATED SUCCESSFULLY!\n");
 }
 
-#if 0
-static __inline s32 _tmp_arr_sort(const void *a, const void *b)
-{
-	const s32 a8 = (s16)(*(const u8 *)a);
-	const s32 b8 = (s16)(*(const u8 *)b);
-	s32 r = INT32_MAX;
-
-	if (a8 > b8)
-		r = 1;
-	else if (a8 < b8)
-		r = -1;
-	else
-		r = 0;
-
-	_mem_debugf("sort res: %d\n", r);
-
-	return r;
-}
-#endif
-
-/*
- * The comparison function necessary for the below function to work at all.
- */
-static int _mem_block_null_cmp(const void *a, const void *b)
-{
-	const struct block *at = (const struct block *)a;
-	const struct block *bt = (const struct block *)b;
-
-#if 0
-	_mem_block_verify(at, __FILE__, __LINE__);
-	_mem_block_verify(bt, __FILE__, __LINE__);
-#endif
-
-	if (!at->ptr)
-		return -1;
-
-	if (!bt->ptr)
-		return 1;
-
-	return 0;
-}
-
-#if 0
-static __inline size_t rand_size(void)
-{
-	size_t r = 0ul;
-
-	r |= (size_t)(rand() & 0xFFFF) << 0ul;
-	r |= (size_t)(rand() & 0xFFFF) << 16ul;
-	r |= (size_t)(rand() & 0xFFFF) << 32ul;
-	r |= (size_t)(rand() & 0xFFFF) << 48ul;
-
-	return r;
-}
-#endif
-
 /*
  * This simply enables `FLAG_IS_INIT` in `flags`,
  * as that's all it really needs to do for now.
@@ -527,93 +460,39 @@ static void _mem_init(void)
 	_mem_debugf("INITIALIZED SUCCESSFULLY!\n");
 }
 
-/*
- * Internal helper function
- */
-static __inline bool_t _mem_block_array_has_null_elements(const char *file,
-							  const int   line)
+static struct block *_mem_free_block_first_get(const char *file, const int line)
 {
-	size_t i;
+	size_t	      i, psz, nsz;
+	void	     *a = NULL;
+	struct block *r = NULL;
 
-	for (i = 0ul; i < memory.cnt; ++i)
-		if (!_mem_block_get(i, file, line)->ptr)
-			return TRUE;
-
-	return FALSE;
-}
-
-/*
- * Sorts the internal memory block array such that the unused slots
- * are sorted towards the beginning and the non-NULL ones are at the
- * end. That way it's easy to just allocate a new slot right at the
- * beginning of the array instead of needing to search for it.
- *
- * Returns if the array needs to be (re)allocated.
- */
-static void _mem_block_array_sort_null_first(const char *file, const int line)
-{
-	assert(memory.cnt);
-	assert(memory.arr);
-
-	if (!_mem_block_get_first(file, line)->ptr) {
-#ifdef ALLOCATOR_DEBUG_VERBOSE
-		_mem_debugf("First mem block is already NULL; "
-			    "no need to sort array.\n");
-#endif /* #ifdef ALLOCATOR_DEBUG_VERBOSE */
-		return;
-	}
-
-	qsort(memory.arr,
-	      memory.cnt,
-	      sizeof(*memory.arr),
-	      &_mem_block_null_cmp);
-
-#ifdef ALLOCATOR_DEBUG_VERBOSE
-	{
-		size_t i;
-
-		_mem_debugf("Sorted array, here's the results... %s:%d\n",
-			    file,
-			    line);
-		for (i = 0ul; i < memory.cnt; ++i) {
-			_mem_debugf("\t%lu: ptr = <%p>\n",
-				    i,
-				    _mem_block_get(i, file, line)->ptr);
-		}
-	}
-#endif /* #ifdef ALLOCATOR_DEBUG_VERBOSE */
-}
-
-/*
- * To cut down on the amount of sorts needed to perform, get the last
- * available NULL slot post-sort so that each subsequent one will make it
- * so that if there are multiple, there will be no need to re-sort the array
- * until all of the NULL slots have been taken up.
- */
-static struct block *_mem_block_get_last_empty_post_sort(const char *file,
-							 const int   line)
-{
-	struct block *last_null = NULL;
-	size_t	      i;
-
-	ASSERT_MEM_ARR(file, line);
-
+	/* Try to search the pre-existing array. */
 	for (i = 0ul; i < memory.cnt; ++i) {
-		struct block *b = _mem_block_get(i, file, line);
+		r = _mem_block_get(i, file, line);
 
-		if (!b->ptr)
-			last_null = b;
+		if (!r->ptr)
+			return r;
 	}
 
-	if (last_null)
-		return last_null;
+	/*
+	 * If the array is empty, or we simply
+	 * couldn't find it, allocate more space!
+	 */
+	psz = memory.cnt;
+	nsz = sizeof(*memory.arr) * ++memory.cnt;
+	if (!psz) {
+		assert(!memory.arr);
+		a = malloc(nsz);
+		assert(a);
+		memory.arr = (struct block *)a;
+	} else {
+		assert(memory.arr);
+		a = realloc(memory.arr, nsz);
+		assert(a);
+		memory.arr = (struct block *)a;
+	}
 
-	mem_assertm_ex(0,
-		       file,
-		       line,
-		       "Failed to find any NULL slots in array post-sort");
-
-	return NULL;
+	return _mem_block_get_last(file, line);
 }
 
 /********************
@@ -655,33 +534,7 @@ void *_mem_alloc_internal(const size_t sz, const char *file, const int line)
 
 	mem_assertm_ex(sz, file, line, "Trying to allocate 0 bytes!");
 
-	/* Call `malloc()` or `realloc()` on the array if necessary */
-	if (!_mem_block_array_has_null_elements(file, line)) {
-		const size_t  psz  = memory.cnt;
-		const size_t  nsz  = sizeof(*memory.arr) * ++memory.cnt;
-		struct block *last = NULL;
-		void	     *all  = NULL;
-
-		if (!psz) {
-			assert(!memory.arr);
-			all = malloc(nsz);
-		} else {
-			assert(memory.arr);
-			all = realloc(memory.arr, nsz);
-		}
-
-		assert(all);
-		memory.arr = (struct block *)all;
-
-		last = _mem_block_get_last(file, line);
-		assert(last);
-		_mem_block_set_empty(last);
-		_mem_block_verify(last, file, line);
-	}
-
-	_mem_block_array_sort_null_first(file, line);
-	s = _mem_block_get_last_empty_post_sort(file, line);
-	_mem_block_verify(s, file, line);
+	s = _mem_free_block_first_get(file, line);
 	p = malloc(sz);
 	assert(p);
 	s->ptr	= p;
