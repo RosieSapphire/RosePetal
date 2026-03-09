@@ -34,8 +34,7 @@ CC     := clang
 CFLAGS := -Wall -Wextra -Weverything -Werror -pedantic -ansi $(WARN_IGNORE)
 
 ifdef DEBUG
-	CFLAGS += -O0 -ggdb3 -fsanitize=address,leak,null \
-		  -D_DEBUG -DALLOCATOR_DEBUG -DRANDOM_DEBUG \
+	CFLAGS += -O0 -ggdb3 -D_DEBUG -DALLOCATOR_DEBUG -DRANDOM_DEBUG \
 		  -fsanitize=address,undefined,leak,null
 	ifdef DEBUG_VERBOSE
 		CFLAGS += -DALLOCATOR_DEBUG_VERBOSE

@@ -4,7 +4,9 @@
 #include "types.h"
 #include "random.h"
 
+#if 1
 #define MEMORY_ALLOCATOR_WRAP_STDLIB
+#endif
 #include "memory_allocator.h"
 
 #define PTR_TEST_CNT 500ul

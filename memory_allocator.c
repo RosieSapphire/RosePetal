@@ -105,12 +105,12 @@ static void _mem_debugf(const char *fmt, ...)
 			      _fmt,                                            \
 			      __VA_ARGS__)
 
-#define ASSERT_MEM_ARR()                                                       \
+#define ASSERT_MEM_ARR(_file, _line)                                           \
 	do {                                                                   \
 		mem_assertm_ex(memory.cnt, file, line, "Memory count is 0");   \
 		mem_assertm_ex(memory.arr,                                     \
-			       file,                                           \
-			       line,                                           \
+			       _file,                                          \
+			       _line,                                          \
 			       "Memory array is NULL");                        \
 	} while (0)
 
@@ -177,7 +177,7 @@ _mem_block_verify(const struct block *b, const char *file, const int line)
 {
 	size_t ind = SIZE_MAX;
 
-	ASSERT_MEM_ARR();
+	ASSERT_MEM_ARR(file, line);
 
 	mem_assertm_ex(b, file, line, "Block passed in is NULL");
 	ind = (size_t)(b - memory.arr);
@@ -253,7 +253,7 @@ _mem_block_get(const size_t i, const char *file, const int line)
 {
 	struct block *b = NULL;
 
-	ASSERT_MEM_ARR();
+	ASSERT_MEM_ARR(file, line);
 	mem_assertf_ex(i < memory.cnt,
 		       file,
 		       line,
@@ -280,7 +280,7 @@ _mem_block_get(const size_t i, const char *file, const int line)
  */
 static struct block *_mem_block_get_first(const char *file, const int line)
 {
-	ASSERT_MEM_ARR();
+	ASSERT_MEM_ARR(file, line);
 
 	return _mem_block_get(0ul, file, line);
 }
@@ -291,7 +291,7 @@ static struct block *_mem_block_get_first(const char *file, const int line)
  */
 static struct block *_mem_block_get_last(const char *file, const int line)
 {
-	ASSERT_MEM_ARR();
+	ASSERT_MEM_ARR(file, line);
 
 	return _mem_block_get(memory.cnt - 1ul, file, line);
 }
@@ -309,7 +309,7 @@ _mem_block_from_pointer(const void *ptr, const char *file, const int line)
 {
 	size_t i;
 
-	ASSERT_MEM_ARR();
+	ASSERT_MEM_ARR(file, line);
 
 	for (i = 0ul; i < memory.cnt; ++i) {
 		struct block *s = _mem_block_get(i, file, line);
@@ -355,7 +355,7 @@ static void _mem_block_pointer_free(struct block *s,
 				    const char	 *file,
 				    const int	  line)
 {
-	ASSERT_MEM_ARR();
+	ASSERT_MEM_ARR(file, line);
 
 	_mem_block_verify(s, file, line);
 
@@ -378,88 +378,21 @@ static void _mem_block_pointer_free(struct block *s,
 }
 
 /*
- * Searches through the allocator's memory block array and finds all the slots
- * that have actively allocated pointers, and returns an array of `size_t`
- * elements containing the indices into the allocator's array, as well as the
- * size of that index array to `cnt_out`.
- *
- * This is only called internally from `_mem_atexit()` as a means of
- * determining how much user-allocated memory was still in use at the
- * time of the program ending.
- *
- * RATIONALE:
- * The reason this function is important is because of the way the
- * allocator works in general. Starting from the first call to `mem_alloc()`,
- * when you allocate a new pointer, it has to allocate an internal array for
- * storing the actual memory blocks before it can call `malloc()` for that
- * block for storing the user's pointer.
- *
- * However, when a pointer is _freed_, the user pointer stored at the internal
- * block location is wiped out cleanly, but the BLOCK stays in memory. There
- * are a few reaons for this:
- *
- *	1. If we wanted the internal memory block array to be packed tightly,
- *	   that would mean re-sorting and re-allocating it every single time
- *	   a called to `mem_alloc()` or `mem_free()` is made. This is really
- *	   slow and inefficient, but also mostly pointless.
- *
- *	2. It cuts down on the amount of `realloc()` calls since if there's
- *	   a bunch of free slots already in the internal memory allocator,
- *	   it's better to just use those than freeing and reallocating the
- *	   same space we literally just fucking freed.
- *
- *	3. This provides a benchmark for us to know what the maximum amount
- *	   of memory blocks active at a single point in the program was.
- *	   This may not be the _most_ useful thing in the works, but it means
- *	   if our program is running on a low-memory machine, we can know how
- *	   many blocks were active at once at the peak of the program's memory
- *	   usage to hopefully work around those limitations better.
- *
- * Anyway, this function is probably gonna be replaced in the future with
- * one that just sorts the array such that the non-NULL elements are all at
- * the front of the list so they can be looped through more efficiently without
- * needing to allocate more memory for an index buffer.
- *
- * Counter to this, it might be a decent idea to sort the memory array the
- * _opposite_ (NULL elements at front) to make searching for an empty slot
- * not take O(n) time. Basically, we'd sort the array like that and just get
- * the first element of the array. If it's NULL, we know for sure there are
- * no more memory slots and we can just skip a bunch of looping through shit.
- *
- * Granted, there is a question of if the performance trade-off between
- * searching for first free element linearly through an array is faster
- * than sorting the array such that the NULL elements (if any) are present
- * at the beginning of the array, but that'll require some measuring. lol
+ * Just gets the number of blocks in the array
+ * that have active pointers attached to them.
  */
-static size_t *
-_mem_active_block_indices_get(size_t *cnt_out, const char *file, const int line)
+static __inline size_t _mem_active_blocks_get_count(const char *file,
+						    const int	line)
 {
-	size_t *arr = NULL, cnt = 0ul, i;
+	size_t i, cnt = 0ul;
 
-	arr = malloc(0);
-	assert(arr);
+	ASSERT_MEM_ARR(file, line);
 
-	for (i = 0ul; i < memory.cnt; ++i) {
-		const struct block *b  = _mem_block_get(i, file, line);
-		size_t		   *re = NULL;
+	for (i = 0ul; i < memory.cnt; ++i)
+		if (memory.arr[i].ptr)
+			++cnt;
 
-		if (!b->ptr)
-			continue;
-
-		re = realloc(arr, sizeof(*arr) * ++cnt);
-		assert(re);
-		re[cnt - 1ul] = i;
-		arr	      = re;
-	}
-
-	*cnt_out = cnt;
-
-	if (!cnt) {
-		free(arr);
-		arr = NULL;
-	}
-
-	return arr;
+	return cnt;
 }
 
 /*
@@ -473,49 +406,48 @@ _mem_active_block_indices_get(size_t *cnt_out, const char *file, const int line)
  */
 static void _mem_atexit(void)
 {
-	size_t	i, active_cnt = SIZE_MAX;
-	size_t *active_index_arr = NULL;
+	size_t i, j, active_cnt = SIZE_MAX;
 
+	/* If we never called `malloc()` in our program, we're good to exit. */
 	if (!(flags & FLAG_IS_INIT)) {
 		assert(!memory.arr);
 		assert(!memory.cnt);
 		_mem_debugf("No memory was allocated in this "
 			    "program; nothing to report.\n");
-		exit(EXIT_SUCCESS);
+		goto finish_terminate;
 	}
 
-	active_index_arr = _mem_active_block_indices_get(&active_cnt,
-							 __FILE__,
-							 __LINE__);
+	active_cnt = _mem_active_blocks_get_count(__FILE__, __LINE__);
 	if (!active_cnt) {
-		assert(!active_index_arr);
 		_mem_debugf("\n");
 		_mem_debugf("NO BLOCKS LEFT ACTIVE AT EXIT; GOOD JOB!\n");
-		goto finish_terminate;
+		goto finish_terminate_free_internals;
 	}
 
 	_mem_debugf("\n");
 	_mem_debugf("WARNING: %d BLOCKS STILL ACTIVE AT EXIT:\n", active_cnt);
 
-	for (i = 0ul; i < active_cnt; ++i) {
-		struct block *s = _mem_block_get(active_index_arr[i],
-						 __FILE__,
-						 __LINE__);
+	j = 0ul;
+	for (i = 0ul; i < memory.cnt; ++i) {
+		struct block *s = _mem_block_get(i, __FILE__, __LINE__);
 
 		if (!s->ptr)
 			continue;
 
 		_mem_debugf("\tLEAK %lu: [p:<%p> sz:%lu] %s:%u\n",
-			    i,
+			    j,
 			    s->ptr,
 			    s->sz,
 			    s->file,
 			    s->line);
 		_mem_block_pointer_free(s, TRUE, __FILE__, __LINE__);
+		++j;
 	}
 
-	if (active_index_arr)
-		free(active_index_arr);
+finish_terminate_free_internals:
+	free(memory.arr);
+	memory.arr = NULL;
+	memory.cnt = 0ul;
 
 finish_terminate:
 	flags &= ~FLAG_IS_INIT;
@@ -667,7 +599,7 @@ static struct block *_mem_block_get_last_empty_post_sort(const char *file,
 	struct block *last_null = NULL;
 	size_t	      i;
 
-	ASSERT_MEM_ARR();
+	ASSERT_MEM_ARR(file, line);
 
 	for (i = 0ul; i < memory.cnt; ++i) {
 		struct block *b = _mem_block_get(i, file, line);
