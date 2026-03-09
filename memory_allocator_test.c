@@ -15,7 +15,7 @@ int main(void)
 	a = (u32 *)malloc(sizeof(*a) * 5ul);
 	b = (u32 *)malloc(sizeof(*b) * 63ul);
 	c = (u32 *)malloc(sizeof(*c) * 4096ul);
-#if 1
+#if 0
 	mem_free(c);
 	mem_free(b);
 	mem_free(a);

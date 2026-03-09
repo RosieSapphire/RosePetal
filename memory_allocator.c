@@ -37,10 +37,8 @@
  *   anything. It also doesn't allocate anything extra, so there's that. lol  *
  ******************************************************************************/
 
-#undef mem_init
 #undef mem_alloc
 #undef mem_free
-#undef mem_terminate
 
 #ifdef MEMORY_ALLOCATOR_WRAP_STDLIB
 #undef malloc
@@ -356,10 +354,10 @@ _mem_block_from_pointer(const void *ptr, const char *file, const int line)
 	assert(memory.cnt && memory.arr);
 
 	for (i = 0ul; i < memory.cnt; ++i) {
-		struct block	      *s = _mem_block_get(i, file, line);
-		enum mem_verify_result r = MVR_INVALID_RESULT;
+		struct block		    *s = _mem_block_get(i, file, line);
+		const enum mem_verify_result r =
+				_mem_block_verify(i, file, line);
 
-		r = _mem_block_verify(i, file, line);
 		_mem_block_exit_if_error(r, i, file, line);
 
 		if (s->ptr == ptr)
@@ -373,18 +371,28 @@ _mem_block_from_pointer(const void *ptr, const char *file, const int line)
 /*
  * Frees the user-allocated pointer associated with a memory block.
  */
-static void
-_mem_block_pointer_free(struct block *s, const char *file, const int line)
+static void _mem_block_pointer_free(struct block *s,
+				    const bool_t  was_called_from_exit,
+				    const char	 *file,
+				    const int	  line)
 {
 	assert(s);
 	assert(s->ptr);
 	assert(s->sz);
 
-	_mem_debugf("Freed pointer <%p> of size %lu at %s:%d\n",
-		    s->ptr,
-		    s->sz,
-		    file,
-		    line);
+	/*
+	 * If this function was called from exit, it means that
+	 * these were blocks that were failed to be freed by the
+	 * user, which already has debug information printing
+	 * about it, so we don't need to print this again.
+	 */
+	if (!was_called_from_exit) {
+		_mem_debugf("mem_free(<%p>) [sz:%lu] %s:%d\n",
+			    s->ptr,
+			    s->sz,
+			    file,
+			    line);
+	}
 
 	free(s->ptr);
 	s->ptr = NULL;
@@ -448,13 +456,35 @@ _mem_block_pointer_free(struct block *s, const char *file, const int line)
 static size_t *
 _mem_active_block_indices_get(size_t *cnt_out, const char *file, const int line)
 {
-	size_t *arr = NULL, i;
+	size_t *arr = NULL, cnt = 0ul, i;
 
 	arr = malloc(0);
+	assert(arr);
 
 	for (i = 0ul; i < memory.cnt; ++i) {
-		struct block *b = _mem_block_get()
+		const struct block	    *b = _mem_block_get(i, file, line);
+		const enum mem_verify_result r =
+				_mem_block_verify(i, file, line);
+		size_t *re = NULL;
+
+		_mem_block_exit_if_error(r, i, file, line);
+		if (!b->ptr)
+			continue;
+
+		re = realloc(arr, sizeof(*arr) * ++cnt);
+		assert(re);
+		re[cnt - 1ul] = i;
+		arr	      = re;
 	}
+
+	*cnt_out = cnt;
+
+	if (!cnt) {
+		free(arr);
+		arr = NULL;
+	}
+
+	return arr;
 }
 
 /*
@@ -476,16 +506,18 @@ static void _mem_atexit(void)
 	active_index_arr = _mem_active_block_indices_get(&active_cnt,
 							 __FILE__,
 							 __LINE__);
-
 	if (!active_cnt) {
 		assert(!active_index_arr);
 		goto finish_terminate;
 	}
 
-	_mem_debugf("WARNING: %d BLOCKS STILL ACTIVE AT EXIT:\n", memory.cnt);
+	_mem_debugf("\n");
+	_mem_debugf("WARNING: %d BLOCKS STILL ACTIVE AT EXIT:\n", active_cnt);
 
-	for (i = 0ul; i < memory.cnt; ++i) {
-		struct block *s = _mem_block_get(i, __FILE__, __LINE__);
+	for (i = 0ul; i < active_cnt; ++i) {
+		struct block *s = _mem_block_get(active_index_arr[i],
+						 __FILE__,
+						 __LINE__);
 		const enum mem_verify_result r =
 				_mem_block_verify(i, __FILE__, __LINE__);
 
@@ -494,15 +526,15 @@ static void _mem_atexit(void)
 		if (!s->ptr)
 			continue;
 
-		_mem_debugf("\t%lu: LEAK <%p> of size %lu "
-			    "in slot %lu at %s:%lu\n",
+		_mem_debugf("\tLEAK %lu: [p:<%p> sz:%lu sl:%lu] "
+			    "%s:%lu\n",
 			    i,
 			    s->ptr,
 			    s->sz,
 			    _mem_block_get_index(s, __FILE__, __LINE__),
-			    "TODO: Implement file and line debugging",
+			    "some_file.c",
 			    42069);
-		_mem_block_pointer_free(s, __FILE__, __LINE__);
+		_mem_block_pointer_free(s, TRUE, __FILE__, __LINE__);
 	}
 
 	if (active_index_arr)
@@ -511,7 +543,7 @@ static void _mem_atexit(void)
 finish_terminate:
 	flags &= ~FLAG_IS_INIT;
 
-	_mem_debugf("TERMINATED SUCCESSFULLY @ %s:%d.\n", __FILE__, __LINE__);
+	_mem_debugf("TERMINATED SUCCESSFULLY!\n");
 }
 
 /*
@@ -521,13 +553,13 @@ finish_terminate:
  * This function is only called internally by `mem_alloc()` in order to
  * ensure that it's set up and the rest of the internal's recognize that.
  */
-static void _mem_init(const char *file, const int line)
+static void _mem_init(void)
 {
 	assert(!memory.cnt);
 	assert(!memory.arr);
 	assert(!(flags & FLAG_IS_INIT)); /* Make sure we didn't already */
 	flags |= FLAG_IS_INIT;
-	_mem_debugf("INITIALIZED SUCCESSFULLY @ %s:%d.\n", file, line);
+	_mem_debugf("INITIALIZED SUCCESSFULLY!\n");
 }
 
 /********************
@@ -564,9 +596,16 @@ void *_mem_alloc_internal(const size_t sz, const char *file, const int line)
 	assert(file);
 	assert(line >= 0);
 
+	/* If we didn't register a callback, don't go further. */
+	if (!(flags & FLAG_HAS_CALLBACK)) {
+		_mem_debugf("User hasn't called `mem_register_exit_callback()` "
+			    "before calling `mem_alloc()`.\n");
+		exit(EXIT_FAILURE);
+	}
+
 	/* First call of `mem_alloc()`. */
 	if (!(flags & FLAG_IS_INIT))
-		_mem_init(file, line);
+		_mem_init();
 
 	assert(sz);
 
@@ -576,12 +615,7 @@ void *_mem_alloc_internal(const size_t sz, const char *file, const int line)
 	s->ptr = p;
 	s->sz  = sz;
 
-	_mem_debugf("mem_alloc(%lu) -> <%p> [s:%lu] %s:%d\n",
-		    sz,
-		    p,
-		    _mem_block_get_index(s, file, line),
-		    file,
-		    line);
+	_mem_debugf("mem_alloc(%lu) -> <%p> %s:%d\n", sz, p, file, line);
 
 	return p;
 }
@@ -597,5 +631,5 @@ void _mem_free_internal(void *ptr, const char *file, const int line)
 	s = _mem_block_from_pointer(ptr, file, line);
 	assert(s);
 
-	_mem_block_pointer_free(s, file, line);
+	_mem_block_pointer_free(s, FALSE, file, line);
 }

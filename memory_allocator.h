@@ -55,10 +55,8 @@ extern void _mem_free_internal(void *ptr, const char *file, const int line);
  */
 #define mem_register_exit_callback()                                           \
 	_mem_register_exit_callback_internal(__FILE__, __LINE__)
-#define mem_init()	_mem_init_internal(__FILE__, __LINE__)
 #define mem_alloc(_sz)	_mem_alloc_internal(_sz, __FILE__, __LINE__)
 #define mem_free(_ptr)	_mem_free_internal(_ptr, __FILE__, __LINE__)
-#define mem_terminate() _mem_terminate_internal(__FILE__, __LINE__)
 
 #ifdef MEMORY_ALLOCATOR_WRAP_STDLIB
 #define malloc(_sz) _mem_alloc_internal(_sz, __FILE__, __LINE__)
