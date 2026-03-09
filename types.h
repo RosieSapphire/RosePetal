@@ -1,8 +1,7 @@
 #ifndef _TYPES_H_
 #define _TYPES_H_
 
-#define STATIC_ASSERT(_cond, _msg)                                             \
-	extern char static_assert_fail_##_msg[(_cond) ? 1 : -1]
+#include "static_assert.h"
 
 typedef unsigned char u8;
 typedef signed char   s8;

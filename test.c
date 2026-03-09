@@ -1,10 +1,8 @@
 #include <assert.h>
 #include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <time.h>
 
 #include "types.h"
+#include "random.h"
 
 #define MEMORY_ALLOCATOR_WRAP_STDLIB
 #include "memory_allocator.h"
@@ -18,52 +16,40 @@
 
 static u32 *ptr_test[PTR_TEST_CNT] = { NULL };
 
-static __inline u8 rand_u8_nz(void)
-{
-	u8 r = UINT8_MAX;
-
-	do {
-		r = rand() & UINT8_MAX;
-	} while (!r);
-
-	return r;
-}
-
-static __inline s32 rand_s32(void)
-{
-	return (s32)(rand() & INT32_MAX);
-}
-
 int main(void)
 {
 	size_t i;
 
 	mem_register_exit_callback();
 
-	srand((u32)time(NULL));
+	random_seed(UINT32_MAX);
 
 	/* Allocate a bunch of memory */
 	for (i = 0ul; i < PTR_TEST_CNT; ++i) {
 		size_t j;
-		const u8 num = rand_u8_nz();
+		u8 num;
+
+		do {
+			num = random_u8();
+		} while (!num);
 
 		ptr_test[i] = (u32 *)malloc(sizeof(**ptr_test) * num);
 		assert(ptr_test[i]);
 
-		/* If 1/2 chance succeeds, just continue like normal */
-		if (rand() & 1) {
+		/* 50% of the time, just continue like normal */
+		if (random_bool()) {
 			for (j = 0ul; j < num; ++j)
-				*(ptr_test[i]) = (u32)rand_s32();
+				*(ptr_test[i]) = random_u32();
 
 			continue;
 		}
 
 		/*
-		 * If it fails, go through all that's currently
-		 * allocated, and randomly (50/50) free those pointers.
+		 * The other 50% of the time, go through all that's currently
+		 * allocated, and randomly (another 50%) free those pointers.
 		 */
 		for (j = 0ul; j <= i; ++j) {
-			if (rand() & 1)
+			if (random_bool())
 				continue;
 
 			if (!ptr_test[j])
@@ -81,7 +67,7 @@ int main(void)
 
 #ifdef FREE_PARTIAL
 		/* 7/8 chance it'll skip freeing */
-		if (rand() & 7)
+		if (random_u32() % 8)
 			continue;
 #endif /* #ifdef FREE_PARTIAL */
 

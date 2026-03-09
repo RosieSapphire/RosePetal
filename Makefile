@@ -28,14 +28,15 @@ BUILD_FILES := $(PROG_ELF) $(TEST_O) $(LIB_O) *.json .cache/
 
 WARN_IGNORE := -Wno-format-nonliteral -Wno-reserved-macro-identifier \
 	       -Wno-reserved-identifier -Wno-unsafe-buffer-usage \
-	       -Wno-variadic-macros
+	       -Wno-variadic-macros -Wno-bad-function-cast
 
 CC     := clang
 CFLAGS := -Wall -Wextra -Weverything -Werror -pedantic -ansi $(WARN_IGNORE)
 
 ifdef DEBUG
 	CFLAGS += -O0 -ggdb3 -fsanitize=address,leak,null \
-		  -D_DEBUG -DALLOCATOR_DEBUG
+		  -D_DEBUG -DALLOCATOR_DEBUG -DRANDOM_DEBUG \
+		  -fsanitize=address,undefined,leak,null
 	ifdef DEBUG_VERBOSE
 		CFLAGS += -DALLOCATOR_DEBUG_VERBOSE
 	endif
