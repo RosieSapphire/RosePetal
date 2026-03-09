@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdarg.h>
+#include <string.h>
 
 #include "memory_allocator.h"
 #include "types.h"
@@ -327,34 +328,6 @@ static void _mem_block_set_empty(struct block *b)
 }
 
 /*
- * Frees the user-allocated pointer associated with a memory block.
- */
-static void _mem_block_pointer_free(struct block *s,
-				    const bool_t  was_called_from_exit,
-				    const char	 *file,
-				    const int	  line)
-{
-	_mem_block_verify(s, LIST_ALLOC, file, line);
-
-	/*
-	 * If this function was called from exit, it means that
-	 * these were blocks that were failed to be freed by the
-	 * user, which already has debug information printing
-	 * about it, so we don't need to print this again.
-	 */
-	if (!was_called_from_exit) {
-		mem_debugf("mem_free(<%p>) [sz:%lu] %s:%d\n",
-			   s->ptr,
-			   s->sz,
-			   file,
-			   line);
-	}
-
-	free(s->ptr);
-	_mem_block_set_empty(s);
-}
-
-/*
  * Just gets the number of blocks in the array
  * that have active pointers attached to them.
  */
@@ -367,6 +340,133 @@ static __inline size_t _mem_active_blocks_get_count(void)
 			++cnt;
 
 	return cnt;
+}
+
+/*
+ * Conditionally call `malloc()` or `realloc()` depending on if the array
+ * is NULL or not. Very handing for resizing arrays; will probably put
+ * in some kind of util file once I get this more properly fleshed out.
+ */
+static void _array_resize(void	     **arr_ptr,
+			  const size_t elem_size,
+			  const size_t elem_cnt_old,
+			  const size_t elem_cnt_new)
+{
+	size_t psz, nsz;
+	void  *arr = NULL;
+
+	assert(arr_ptr);
+	arr = *arr_ptr;
+
+	psz = elem_cnt_old * elem_size;
+	nsz = elem_cnt_new * elem_size;
+
+	assert(psz != nsz);
+
+	if (!psz && nsz) { /* Allocate a fresh array */
+		assert(!arr);
+		arr = malloc(nsz);
+	} else if (psz && nsz) { /* Reallocate the existing array */
+		assert(arr);
+		arr = realloc(arr, nsz);
+	} else if (psz && !nsz) { /* Free the now-empty array */
+		assert(arr);
+		free(arr);
+		arr = NULL;
+	} else {
+		fprintf(stderr, "INVALID ARRAY CONFIGURATION!\n");
+		abort();
+	}
+
+	*arr_ptr = arr;
+}
+
+/*
+ * Removes an element `ind` from an array and shifts the
+ * entire thing down to accomodate. Calls `_array_resize()`
+ * internally and returns the new size of the array.
+ */
+static size_t _array_remove(void       **arr_ptr,
+			    const size_t ind,
+			    const size_t elem_size,
+			    const size_t elem_cnt)
+{
+	size_t i;
+
+	/*
+	 * TODO:
+	 * Possible optimization: If order doesn't matter, (which
+	 * in the case of memblocks, it doesn't), it may be possible
+	 * to just memcpy the highest position element directly to
+	 * the one we want to remove and then realloc the array,
+	 * making it so there isn't a shitload of memcpy's.
+	 */
+
+	/* Remove that slot from the alloc array and shift it all down */
+	for (i = ind; i < elem_cnt; ++i) {
+		/* If it's the last element in our array, we're good */
+		if (i + 1ul >= elem_cnt)
+			break;
+
+		/* Otherwise, just bucket-brigade the shit down */
+		memcpy((u8 *)(*arr_ptr) + (i * elem_size),
+		       (u8 *)(*arr_ptr) + ((i + 1ul) * elem_size),
+		       elem_size);
+	}
+
+	/* Then resize the array like nothing ever happened. :D */
+	_array_resize(arr_ptr, elem_size, elem_cnt, elem_cnt - 1ul);
+
+	return elem_cnt - 1ul;
+}
+
+static void
+_mem_move_block_to_free_list(struct block *b, const char *file, const int line)
+{
+	const size_t aind = (size_t)(b - memory.alloc_arr);
+
+	mem_assertm_ex(b,
+		       file,
+		       line,
+		       "Trying to move a NULL pointer to the free list");
+	mem_assertf_ex(aind < memory.alloc_cnt,
+		       file,
+		       line,
+		       "Trying to move block <%p> from alloc "
+		       "array to free array, but it was never "
+		       "in the alloc array to begin with!",
+		       b->ptr);
+
+	/* Just fucken' paranoid, honestly... */
+	_mem_block_verify(b, LIST_ALLOC, file, line);
+
+	/* Add a new slot to the end of the free list */
+	_array_resize((void **)&memory.free_arr,
+		      sizeof(*memory.free_arr),
+		      memory.free_cnt,
+		      ++memory.free_cnt);
+
+	/*
+	 * Copy the data over to the newly-created slot,
+	 * but change the `file` and `line` variables
+	 * to reflect the point at which it was freed.
+	 */
+	{
+		struct block *t = memory.free_arr + (memory.free_cnt - 1);
+
+		*t = *b;
+
+		/* Most importantly, ACTUALLY FREE THE FUCKING POINTER! */
+		free(t->ptr);
+
+		t->file = file;
+		t->line = (u32)line;
+	}
+
+	memory.alloc_cnt = _array_remove((void **)&memory.alloc_arr,
+					 aind,
+					 sizeof(*memory.alloc_arr),
+					 memory.alloc_cnt);
 }
 
 /*
@@ -417,7 +517,7 @@ static void _mem_atexit(void)
 			   s->sz,
 			   s->file,
 			   s->line);
-		_mem_block_pointer_free(s, TRUE, __FILE__, __LINE__);
+		_mem_move_block_to_free_list(s, __FILE__, __LINE__);
 		++j;
 	}
 
@@ -453,106 +553,6 @@ static void _mem_init(void)
 	mem_debugf("INITIALIZED SUCCESSFULLY!\n");
 }
 
-/*
- * Conditionally call `malloc()` or `realloc()` depending on if the array
- * is NULL or not. Very handing for resizing arrays; will probably put
- * in some kind of util file once I get this more properly fleshed out.
- */
-static void _array_resize(void	     **arr_ptr,
-			  const size_t elem_size,
-			  const size_t elem_cnt_old,
-			  const size_t elem_cnt_new)
-{
-	size_t psz, nsz;
-	void  *arr = NULL;
-
-	assert(arr_ptr);
-	arr = *arr_ptr;
-
-	psz = elem_cnt_old * elem_size;
-	nsz = elem_cnt_new * elem_size;
-
-	assert(psz != nsz);
-
-	if (!psz && nsz) { /* Allocate a fresh array */
-		assert(!arr);
-		arr = malloc(nsz);
-	} else if (psz && nsz) { /* Reallocate the existing array */
-		assert(arr);
-		arr = realloc(arr, nsz);
-	} else if (psz && !nsz) { /* Free the now-empty array */
-		assert(arr);
-		free(arr);
-		arr = NULL;
-	} else {
-		fprintf(stderr, "INVALID ARRAY CONFIGURATION!\n");
-		abort();
-	}
-
-	*arr_ptr = arr;
-}
-
-static void
-_mem_move_block_to_free_list(struct block *b, const char *file, const int line)
-{
-	const size_t aind = (size_t)(b - memory.alloc_arr);
-	size_t	     i;
-
-	mem_assertm_ex(b,
-		       file,
-		       line,
-		       "Trying to move a NULL pointer to the free list");
-	mem_assertf_ex(aind < memory.alloc_cnt,
-		       file,
-		       line,
-		       "Trying to move block <%p> from alloc "
-		       "array to free array, but it was never "
-		       "in the alloc array to begin with!",
-		       b->ptr);
-
-	/* Just fucken' paranoid, honestly... */
-	_mem_block_verify(b, LIST_ALLOC, file, line);
-
-	/* Add a new slot to the end of the free list */
-	_array_resize((void **)&memory.free_arr,
-		      sizeof(*memory.free_arr),
-		      memory.free_cnt,
-		      ++memory.free_cnt);
-
-	/*
-	 * Copy the data over to the newly-created slot,
-	 * but change the `file` and `line` variables
-	 * to reflect the point at which it was freed.
-	 */
-	{
-		struct block *t = memory.free_arr + (memory.free_cnt - 1);
-
-		*t = *b;
-
-		/* Most importantly, ACTUALLY FREE THE FUCKING POINTER! */
-		free(t->ptr);
-
-		t->file = file;
-		t->line = (u32)line;
-	}
-
-	/* Remove that slot from the alloc array and shift it all down */
-	for (i = aind; i < memory.alloc_cnt; ++i) {
-		/* If it's the last element in our array, we're good */
-		if (i + 1ul >= memory.alloc_cnt)
-			break;
-
-		/* Otherwise, just bucket-brigade the shit down */
-		memory.alloc_arr[i] = memory.alloc_arr[i + 1];
-	}
-
-	/* Then resize the array like nothing ever happened. :D */
-	_array_resize((void **)&memory.alloc_arr,
-		      sizeof(*memory.alloc_arr),
-		      memory.alloc_cnt,
-		      --memory.alloc_cnt);
-}
-
 /********************
  * PUBLIC FUNCTIONS *
  ********************/
@@ -576,7 +576,7 @@ void _mem_register_exit_callback_internal(const char *file, const int line)
 
 void *_mem_alloc_internal(const size_t sz, const char *file, const int line)
 {
-	struct block *s = NULL;
+	struct block *s = NULL, *t = NULL;
 	void	     *p = NULL;
 
 	/* If we didn't register a callback, don't go further. */
@@ -601,20 +601,33 @@ void *_mem_alloc_internal(const size_t sz, const char *file, const int line)
 	/* Get the new empty slot from the end of it */
 	s = memory.alloc_arr + memory.alloc_cnt - 1;
 	_mem_block_set_empty(s);
-#if 0
 	_mem_block_verify(s, LIST_ALLOC, file, line);
-#endif
+
+	p = malloc(sz);
+
+	/*
+	 * When allocating a new pointer, check to see if the
+	 * memory address we get is found anywhere in a block
+	 * that was already freed and remove it from the free list.
+	 *
+	 * This is EXTREMELY important, because if we don't do this,
+	 * it will fuck up and give a false-positive for a double-free.
+	 */
+	t = _mem_get_block_from_user_ptr(p, LIST_FREE, file, line);
+	if (t) {
+		memory.free_cnt = _array_remove((void **)&memory.free_arr,
+						(size_t)(t - memory.free_arr),
+						sizeof(*memory.alloc_arr),
+						memory.free_cnt);
+	}
 
 	/* Set it up with the allocation data */
-	p = malloc(sz);
 	assert(p);
 	s->ptr	= p;
 	s->sz	= sz;
 	s->file = file;
 	s->line = (u32)line;
-#if 0
 	_mem_block_verify(s, LIST_ALLOC, file, line);
-#endif
 
 	mem_debugf("mem_alloc(%lu) -> <%p> %s:%d\n", sz, p, file, line);
 
@@ -653,7 +666,10 @@ void _mem_free_internal(void *ptr, const char *file, const int line)
 		    line,
 		    "Failed to get allocated block from user pointer <%p>",
 		    ptr);
-
+	mem_debugf("mem_free(<%p>) [sz:%lu] %s:%d\n",
+		   s->ptr,
+		   s->sz,
+		   file,
+		   line);
 	_mem_move_block_to_free_list(s, file, line);
-	/*_mem_block_pointer_free(s, FALSE, file, line);*/
 }
