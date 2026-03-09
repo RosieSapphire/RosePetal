@@ -15,12 +15,46 @@
 
 #include <stddef.h>
 
-extern void _mem_init_internal(const char *file, const int line);
+/*
+ * Registeres the internal exit callback for the memory allocator
+ * which makes sure to clean up and memory left behind and notify
+ * you about any pointers you forgot to free (ya greasy bastard. lol).
+ */
+extern void _mem_register_exit_callback_internal(const char *file,
+						 const int   line);
+
+/*
+ * Allocates a user pointer of a specified `sz` and returns it.
+ *
+ * This function allocates internal memory for storing
+ * the blocks, specifically for debugging purposes.
+ *
+ * If `ALLOCATOR_WRAP_STDLIB` is defined, this function will be called
+ * by any instances of `malloc()` where this file is included in.
+ */
 extern void *
 _mem_alloc_internal(const size_t sz, const char *file, const int line);
-extern void _mem_free_internal(void *ptr, const char *file, const int line);
-extern void _mem_terminate_internal(const char *file, const int line);
 
+/*
+ * Frees a user pointer that was previously allocated.
+ *
+ * This function also nullifies the internal memory block
+ * the pointer is associated with, _HOWEVER_, it does not
+ * free the block itself, as it can be used later to re-allocate
+ * another user pointer to.
+ *
+ * If `ALLOCATOR_WRAP_STDLIB` is defined, this function will be called
+ * by any instances of `free()` where this file is included in.
+ */
+extern void _mem_free_internal(void *ptr, const char *file, const int line);
+
+/*
+ * Macro defines for wrapping the calls to `_mem_*_internal()` by giving
+ * them prettier names and passing in the __FILE__ and __LINE__ they were
+ * called from for glorious, glorious debugging purposes!
+ */
+#define mem_register_exit_callback()                                           \
+	_mem_register_exit_callback_internal(__FILE__, __LINE__)
 #define mem_init()	_mem_init_internal(__FILE__, __LINE__)
 #define mem_alloc(_sz)	_mem_alloc_internal(_sz, __FILE__, __LINE__)
 #define mem_free(_ptr)	_mem_free_internal(_ptr, __FILE__, __LINE__)
