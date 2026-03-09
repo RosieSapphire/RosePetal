@@ -552,9 +552,6 @@ static __inline bool_t _mem_block_array_has_null_elements(const char *file,
  */
 static void _mem_block_array_sort_null_first(const char *file, const int line)
 {
-	assert(file);
-	assert(line >= 0);
-
 	assert(memory.cnt);
 	assert(memory.arr);
 
@@ -628,17 +625,12 @@ static struct block *_mem_block_get_last_empty_post_sort(const char *file,
  */
 void _mem_register_exit_callback_internal(const char *file, const int line)
 {
-	/*
-	 * Make sure the callback is registered before we initialize the
-	 * module, which would correspond to the first memory allocation.
-	 */
-	assert(!(flags & FLAG_IS_INIT));
+	mem_assertm(!(flags & FLAG_IS_INIT),
+		    "Somehow, first allocation has already "
+		    "been made before registering the callback.");
+	mem_assertm(!(flags & FLAG_HAS_CALLBACK),
+		    "Callback was already registered");
 
-	/* Obviously, make sure we haven't already called this function. */
-	assert(!(flags & FLAG_HAS_CALLBACK));
-
-	assert(file);
-	assert(line >= 0);
 	_mem_debugf("Registered exit callback at %s:%d\n", file, line);
 	atexit(_mem_atexit);
 
@@ -650,21 +642,18 @@ void *_mem_alloc_internal(const size_t sz, const char *file, const int line)
 	struct block *s = NULL;
 	void	     *p = NULL;
 
-	assert(file);
-	assert(line >= 0);
-
 	/* If we didn't register a callback, don't go further. */
-	if (!(flags & FLAG_HAS_CALLBACK)) {
-		_mem_debugf("User hasn't called `mem_register_exit_callback()` "
-			    "before calling `mem_alloc()`.\n");
-		exit(EXIT_FAILURE);
-	}
+	mem_assertm_ex(flags & FLAG_HAS_CALLBACK,
+		       file,
+		       line,
+		       "User hasn't called `mem_register_exit_"
+		       "callback()` before calling `mem_alloc()`.");
 
 	/* First call of `mem_alloc()`. */
 	if (!(flags & FLAG_IS_INIT))
 		_mem_init();
 
-	assert(sz);
+	mem_assertm_ex(sz, file, line, "Trying to allocate 0 bytes!");
 
 	/* Call `malloc()` or `realloc()` on the array if necessary */
 	if (!_mem_block_array_has_null_elements(file, line)) {
