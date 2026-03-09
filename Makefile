@@ -8,7 +8,7 @@ LIB_C    := $(LIB_NAME).c
 LIB_O    := $(LIB_C:%.c=%.o)
 
 # Test
-PROG_NAME := $(LIB_NAME)_test
+PROG_NAME := test
 PROG_ELF  := $(PROG_NAME).elf
 TEST_C    := $(PROG_NAME).c
 TEST_O    := $(TEST_C:%.c=%.o)

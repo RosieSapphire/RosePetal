@@ -13,7 +13,7 @@
 /*
  * Randomly frees only some of the blocks to simulate a lazy-ass programmer
  */
-/* #define FREE_PARTIAL */
+#define FREE_PARTIAL
 
 static u32 *ptr_test[PTR_TEST_CNT] = { NULL };
 
