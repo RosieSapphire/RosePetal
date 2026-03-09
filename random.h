@@ -41,7 +41,7 @@ static __inline void _assertf_internal(const bool_t cond,
 	vfprintf(stderr, fmt, args);
 	fprintf(stderr, "\n");
 	va_end(args);
-	exit(EXIT_FAILURE);
+	abort();
 }
 
 #define assertf(_cond, _fmt, ...)                                              \

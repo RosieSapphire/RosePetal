@@ -15,7 +15,7 @@
  * Randomly frees only some of the blocks to simulate a lazy-ass programmer
  */
 #if 1
-#define FREE_PARTIAL
+#define SIMULATE_LEAK
 #endif
 
 static u32 *ptr_test[PTR_TEST_CNT] = { NULL };
@@ -69,13 +69,16 @@ int main(void)
 		if (!ptr_test[i])
 			continue;
 
-#ifdef FREE_PARTIAL
+#ifdef SIMULATE_LEAK
 		/* 7/8 chance it'll skip freeing */
 		if (random_u32() % 8)
 			continue;
-#endif /* #ifdef FREE_PARTIAL */
+#endif /* #ifdef SIMULATE_LEAK */
 
 		free(ptr_test[i]);
+#if 0
+		free(ptr_test[i]); /* double-free */
+#endif
 		ptr_test[i] = NULL;
 	}
 

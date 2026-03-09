@@ -10,25 +10,8 @@
 /******************************************************************************
  * TODO:                                                                      *
  *                                                                            *
- * > Implement a free-list for double-free checking                           *
- *                                                                            *
  * > Make this into a header-only library. Not                                *
  *   ideal, obviously, but extremely portable.                                *
- *                                                                            *
- * > The custom error codes I use in `_mem_block_verify()` should be          *
- *   expanded to encapsulate all errors that could be experienced by the      *
- *   allocator so that it doesn't just crash when something goes wrong.       *
- *   I personally love crashing when shit goes wrong, since that forces me    *
- *   to fix it, but the general public doesn't seem to be a big fan. lol      *
- *                                                                            *
- * > I think a cleaner implementation for how `_mem_atexit()` handles doing   *
- *   the whole free-all-the-blocks-left-over-by-the-user shtick is that,      *
- *   instead of allocating an indices array and indexing them that way, just  *
- *   sort the existing memory block array such that all the active blocks are *
- *   at the beginning of the array and loop through those. At this point, the *
- *   program is already over and the user isn't going to be using those       *
- *   pointers anymore anyway, so sorting the data really won't affect         *
- *   anything. It also doesn't allocate anything extra, so there's that. lol  *
  ******************************************************************************/
 
 #undef mem_alloc
@@ -38,6 +21,26 @@
 #undef malloc
 #undef free
 #endif /* #ifdef MEMORY_ALLOCATOR_WRAP_STDLIB */
+
+#define ASSERT_WHICH_IS_VALID(_which, _file, _line)                            \
+	mem_assertf_ex(_which == LIST_ALLOC || _which == LIST_FREE,            \
+		       _file,                                                  \
+		       _line,                                                  \
+		       "The `which_list_e` parameter can only be "             \
+		       "`LIST_ALLOC` or `LIST_FREE` (0 and 1 "                 \
+		       "respectively); currently, it's %u\n",                  \
+		       _which)
+
+enum {
+	FLAGS_NONE	  = 0,
+	FLAG_IS_INIT	  = (1 << 0),
+	FLAG_HAS_CALLBACK = (1 << 1),
+	FLAGS_MASK	  = (FLAG_IS_INIT | FLAG_HAS_CALLBACK)
+};
+typedef u8 internal_flags_e;
+
+enum { LIST_ALLOC = 0, LIST_FREE };
+typedef u8 which_list_e;
 
 struct block {
 	const char *file;
@@ -49,18 +52,11 @@ struct block {
 };
 
 static struct memory {
-	struct block *arr;
-	size_t	      cnt;
+	struct block *alloc_arr;
+	struct block *free_arr;
+	size_t	      alloc_cnt;
+	size_t	      free_cnt;
 } memory;
-
-enum {
-	FLAGS_NONE	  = 0,
-	FLAG_IS_INIT	  = (1 << 0),
-	FLAG_HAS_CALLBACK = (1 << 1),
-	FLAGS_MASK	  = (FLAG_IS_INIT | FLAG_HAS_CALLBACK)
-};
-
-typedef u8 internal_flags_e;
 
 static internal_flags_e flags = FLAGS_NONE;
 
@@ -71,7 +67,7 @@ static internal_flags_e flags = FLAGS_NONE;
 /*
  * Prints a formatted message to STDERR only if `ALLOCATOR_DEBUG` is defined.
  */
-static void _mem_debugf(const char *fmt, ...)
+static void mem_debugf(const char *fmt, ...)
 {
 #ifdef ALLOCATOR_DEBUG
 	va_list args;
@@ -105,15 +101,6 @@ static void _mem_debugf(const char *fmt, ...)
 			      _fmt,                                            \
 			      __VA_ARGS__)
 
-#define ASSERT_MEM_ARR(_file, _line)                                           \
-	do {                                                                   \
-		mem_assertm_ex(memory.cnt, file, line, "Memory count is 0");   \
-		mem_assertm_ex(memory.arr,                                     \
-			       _file,                                          \
-			       _line,                                          \
-			       "Memory array is NULL");                        \
-	} while (0)
-
 /*
  * Effectively an assert wrapper that allows for a format string.
  */
@@ -141,7 +128,7 @@ static void _mem_assertf_internal(const bool_t cond,
 	(void)vfprintf(stderr, fmt, args);
 	(void)fprintf(stderr, "\n");
 	va_end(args);
-	exit(EXIT_FAILURE);
+	abort();
 #else  /* #ifdef ALLOCATOR_DEBUG */
 	(void)cond;
 	(void)cond_str;
@@ -172,24 +159,31 @@ static void _mem_assertf_internal(const bool_t cond,
  * This would be the opposite case, since it has an
  * active pointer, but no size associated with it.
  */
-static void
-_mem_block_verify(const struct block *b, const char *file, const int line)
+static void _mem_block_verify(const struct block *b,
+			      const which_list_e  which,
+			      const char	 *file,
+			      const int		  line)
 {
-	size_t ind = SIZE_MAX;
+	struct block *arr = NULL;
+	size_t	      cnt = SIZE_MAX, ind = SIZE_MAX;
+	const bool_t  is_alloc = (which == LIST_ALLOC);
 
-	ASSERT_MEM_ARR(file, line);
+	ASSERT_WHICH_IS_VALID(which, file, line);
+	arr = is_alloc ? memory.alloc_arr : memory.free_arr;
+	cnt = is_alloc ? memory.alloc_cnt : memory.free_cnt;
 
 	mem_assertm_ex(b, file, line, "Block passed in is NULL");
-	ind = (size_t)(b - memory.arr);
-	mem_assertf_ex(ind < memory.cnt,
+	ind = (size_t)(b - arr);
+	mem_assertf_ex(ind < cnt,
 		       file,
 		       line,
-		       "Index %lu is out of range! (Max is %lu)",
+		       "Index %lu is out of range of %s list! (Max is %lu)",
 		       ind,
-		       memory.cnt);
+		       is_alloc ? "ALLOC" : "FREE",
+		       cnt);
 
 #ifdef ALLOCATOR_DEBUG_VERBOSE
-	_mem_debugf("Verifying memory slot %lu\n", ind);
+	mem_debugf("Verifying memory slot %lu\n", ind);
 #endif /* #ifdef ALLOCATOR_DEBUG_VERBOSE */
 
 	/* If our pointer is NULL, the rest of our data better match! */
@@ -198,7 +192,7 @@ _mem_block_verify(const struct block *b, const char *file, const int line)
 			       file,
 			       line,
 			       "Block <%p>'s pointer is NULL, "
-			       "but size is greather than 0",
+			       "but size is greater than 0",
 			       b);
 		mem_assertf_ex(!b->file,
 			       file,
@@ -248,41 +242,38 @@ _mem_block_verify(const struct block *b, const char *file, const int line)
  *
  * It also calls `_mem_block_verify()` in order to ensure the block is valid.
  */
-static struct block *
-_mem_block_get(const size_t i, const char *file, const int line)
+static struct block *_mem_block_get(const size_t       i,
+				    const which_list_e which,
+				    const char	      *file,
+				    const int	       line)
 {
 	struct block *b = NULL;
+	size_t	      cnt;
 
-	ASSERT_MEM_ARR(file, line);
-	mem_assertf_ex(i < memory.cnt,
+	ASSERT_WHICH_IS_VALID(which, file, line);
+	cnt = (which == LIST_ALLOC) ? memory.alloc_cnt : memory.free_cnt;
+
+	mem_assertf_ex(i < cnt,
 		       file,
 		       line,
-		       "Block index %lu is invalid! (Max is %lu)",
+		       "Block index %lu from %s list is invalid! (Max is %lu)",
 		       i,
-		       memory.cnt);
+		       (which == LIST_ALLOC) ? "ALLOC" : "FREE",
+		       cnt);
 
 #ifdef ALLOCATOR_DEBUG_VERBOSE
-	_mem_debugf("Got block at index %lu @ %s:%d\n", i, file, line);
+	mem_debugf("Got block at index %lu @ %s:%d\n", i, file, line);
 #else  /* #ifdef ALLOCATOR_DEBUG_VERBOSE */
 	(void)file;
 	(void)line;
 #endif /* #ifdef ALLOCATOR_DEBUG_VERBOSE #else */
 
-	b = memory.arr + i;
-	_mem_block_verify(b, file, line);
+	ASSERT_WHICH_IS_VALID(which, file, line);
+
+	b = ((which == LIST_ALLOC) ? memory.alloc_arr : memory.free_arr) + i;
+	_mem_block_verify(b, which, file, line);
 
 	return b;
-}
-
-/*
- * Safely gets and returns the pointer to the last block
- * at the end of the allocator memory block array.
- */
-static struct block *_mem_block_get_last(const char *file, const int line)
-{
-	ASSERT_MEM_ARR(file, line);
-
-	return _mem_block_get(memory.cnt - 1ul, file, line);
 }
 
 /*
@@ -293,25 +284,24 @@ static struct block *_mem_block_get_last(const char *file, const int line)
  * you pass in the user-allocated pointer, but you also need
  * to clear out the block that pointer is associated with.
  */
-static struct block *
-_mem_block_from_pointer(const void *ptr, const char *file, const int line)
+static struct block *_mem_get_block_from_user_ptr(const void	    *ptr,
+						  const which_list_e which,
+						  const char	    *file,
+						  const int	     line)
 {
-	size_t i;
+	size_t i, cnt;
 
-	ASSERT_MEM_ARR(file, line);
+	ASSERT_WHICH_IS_VALID(which, file, line);
 
-	for (i = 0ul; i < memory.cnt; ++i) {
-		struct block *s = _mem_block_get(i, file, line);
+	cnt = (which == LIST_ALLOC) ? memory.alloc_cnt : memory.free_cnt;
+
+	for (i = 0ul; i < cnt; ++i) {
+		struct block *s = _mem_block_get(i, which, file, line);
 
 		if (s->ptr == ptr)
 			return s;
 	}
 
-	mem_assertf_ex(0,
-		       file,
-		       line,
-		       "Failed to get memory slot from pointer <%p>",
-		       ptr);
 	return NULL;
 }
 
@@ -320,15 +310,15 @@ _mem_block_from_pointer(const void *ptr, const char *file, const int line)
  */
 static void _mem_block_set_empty(struct block *b)
 {
-	mem_assertm(memory.cnt, "Memory count is 0");
-	mem_assertm(memory.arr, "Memory array is NULL");
+	mem_assertm(memory.alloc_cnt, "Memory count is 0");
+	mem_assertm(memory.alloc_arr, "Memory array is NULL");
 
 	mem_assertm(b, "Block pointer is NULL");
-	mem_assertf((size_t)(b - memory.arr) < memory.cnt,
+	mem_assertf((size_t)(b - memory.alloc_arr) < memory.alloc_cnt,
 		    "Block pointer <%p> is out of range of memory "
 		    "block array; (is %lu, should be less than %lu)",
-		    (size_t)(b - memory.arr),
-		    memory.cnt);
+		    (size_t)(b - memory.alloc_arr),
+		    memory.alloc_cnt);
 
 	b->ptr	= NULL;
 	b->sz	= 0ul;
@@ -344,9 +334,7 @@ static void _mem_block_pointer_free(struct block *s,
 				    const char	 *file,
 				    const int	  line)
 {
-	ASSERT_MEM_ARR(file, line);
-
-	_mem_block_verify(s, file, line);
+	_mem_block_verify(s, LIST_ALLOC, file, line);
 
 	/*
 	 * If this function was called from exit, it means that
@@ -355,11 +343,11 @@ static void _mem_block_pointer_free(struct block *s,
 	 * about it, so we don't need to print this again.
 	 */
 	if (!was_called_from_exit) {
-		_mem_debugf("mem_free(<%p>) [sz:%lu] %s:%d\n",
-			    s->ptr,
-			    s->sz,
-			    file,
-			    line);
+		mem_debugf("mem_free(<%p>) [sz:%lu] %s:%d\n",
+			   s->ptr,
+			   s->sz,
+			   file,
+			   line);
 	}
 
 	free(s->ptr);
@@ -370,15 +358,12 @@ static void _mem_block_pointer_free(struct block *s,
  * Just gets the number of blocks in the array
  * that have active pointers attached to them.
  */
-static __inline size_t _mem_active_blocks_get_count(const char *file,
-						    const int	line)
+static __inline size_t _mem_active_blocks_get_count(void)
 {
 	size_t i, cnt = 0ul;
 
-	ASSERT_MEM_ARR(file, line);
-
-	for (i = 0ul; i < memory.cnt; ++i)
-		if (memory.arr[i].ptr)
+	for (i = 0ul; i < memory.alloc_cnt; ++i)
+		if (memory.alloc_arr[i].ptr)
 			++cnt;
 
 	return cnt;
@@ -399,49 +384,55 @@ static void _mem_atexit(void)
 
 	/* If we never called `malloc()` in our program, we're good to exit. */
 	if (!(flags & FLAG_IS_INIT)) {
-		assert(!memory.arr);
-		assert(!memory.cnt);
-		_mem_debugf("No memory was allocated in this "
-			    "program; nothing to report.\n");
+		assert(!memory.alloc_arr);
+		assert(!memory.alloc_cnt);
+		mem_debugf("No memory was allocated in this "
+			   "program; nothing to report.\n");
 		goto finish_terminate;
 	}
 
-	active_cnt = _mem_active_blocks_get_count(__FILE__, __LINE__);
+	active_cnt = _mem_active_blocks_get_count();
 	if (!active_cnt) {
-		_mem_debugf("\n");
-		_mem_debugf("NO BLOCKS LEFT ACTIVE AT EXIT; GOOD JOB!\n");
+		mem_debugf("\n");
+		mem_debugf("NO BLOCKS LEFT ACTIVE AT EXIT; GOOD JOB!\n");
 		goto finish_terminate_free_internals;
 	}
 
-	_mem_debugf("\n");
-	_mem_debugf("WARNING: %d BLOCKS STILL ACTIVE AT EXIT:\n", active_cnt);
+	mem_debugf("\n");
+	mem_debugf("WARNING: %d BLOCKS STILL ACTIVE AT EXIT:\n", active_cnt);
 
 	j = 0ul;
-	for (i = 0ul; i < memory.cnt; ++i) {
-		struct block *s = _mem_block_get(i, __FILE__, __LINE__);
+	for (i = 0ul; i < memory.alloc_cnt; ++i) {
+		struct block *s = _mem_block_get(i,
+						 LIST_ALLOC,
+						 __FILE__,
+						 __LINE__);
 
 		if (!s->ptr)
 			continue;
 
-		_mem_debugf("\tLEAK %lu: [p:<%p> sz:%lu] %s:%u\n",
-			    j,
-			    s->ptr,
-			    s->sz,
-			    s->file,
-			    s->line);
+		mem_debugf("\tLEAK %lu: [p:<%p> sz:%lu] %s:%u\n",
+			   j,
+			   s->ptr,
+			   s->sz,
+			   s->file,
+			   s->line);
 		_mem_block_pointer_free(s, TRUE, __FILE__, __LINE__);
 		++j;
 	}
 
 finish_terminate_free_internals:
-	free(memory.arr);
-	memory.arr = NULL;
-	memory.cnt = 0ul;
+	free(memory.alloc_arr);
+	memory.alloc_arr = NULL;
+	memory.alloc_cnt = 0ul;
+	free(memory.free_arr);
+	memory.free_arr = NULL;
+	memory.free_cnt = 0ul;
 
 finish_terminate:
 	flags &= ~FLAG_IS_INIT;
 
-	_mem_debugf("TERMINATED SUCCESSFULLY!\n");
+	mem_debugf("TERMINATED SUCCESSFULLY!\n");
 }
 
 /*
@@ -453,46 +444,113 @@ finish_terminate:
  */
 static void _mem_init(void)
 {
-	assert(!memory.cnt);
-	assert(!memory.arr);
+	assert(!memory.alloc_cnt);
+	assert(!memory.alloc_arr);
+	assert(!memory.free_cnt);
+	assert(!memory.free_arr);
 	assert(!(flags & FLAG_IS_INIT)); /* Make sure we didn't already */
 	flags |= FLAG_IS_INIT;
-	_mem_debugf("INITIALIZED SUCCESSFULLY!\n");
+	mem_debugf("INITIALIZED SUCCESSFULLY!\n");
 }
 
-static struct block *_mem_free_block_first_get(const char *file, const int line)
+/*
+ * Conditionally call `malloc()` or `realloc()` depending on if the array
+ * is NULL or not. Very handing for resizing arrays; will probably put
+ * in some kind of util file once I get this more properly fleshed out.
+ */
+static void _array_resize(void	     **arr_ptr,
+			  const size_t elem_size,
+			  const size_t elem_cnt_old,
+			  const size_t elem_cnt_new)
 {
-	size_t	      i, psz, nsz;
-	void	     *a = NULL;
-	struct block *r = NULL;
+	size_t psz, nsz;
+	void  *arr = NULL;
 
-	/* Try to search the pre-existing array. */
-	for (i = 0ul; i < memory.cnt; ++i) {
-		r = _mem_block_get(i, file, line);
+	assert(arr_ptr);
+	arr = *arr_ptr;
 
-		if (!r->ptr)
-			return r;
+	psz = elem_cnt_old * elem_size;
+	nsz = elem_cnt_new * elem_size;
+
+	assert(psz != nsz);
+
+	if (!psz && nsz) { /* Allocate a fresh array */
+		assert(!arr);
+		arr = malloc(nsz);
+	} else if (psz && nsz) { /* Reallocate the existing array */
+		assert(arr);
+		arr = realloc(arr, nsz);
+	} else if (psz && !nsz) { /* Free the now-empty array */
+		assert(arr);
+		free(arr);
+		arr = NULL;
+	} else {
+		fprintf(stderr, "INVALID ARRAY CONFIGURATION!\n");
+		abort();
 	}
+
+	*arr_ptr = arr;
+}
+
+static void
+_mem_move_block_to_free_list(struct block *b, const char *file, const int line)
+{
+	const size_t aind = (size_t)(b - memory.alloc_arr);
+	size_t	     i;
+
+	mem_assertm_ex(b,
+		       file,
+		       line,
+		       "Trying to move a NULL pointer to the free list");
+	mem_assertf_ex(aind < memory.alloc_cnt,
+		       file,
+		       line,
+		       "Trying to move block <%p> from alloc "
+		       "array to free array, but it was never "
+		       "in the alloc array to begin with!",
+		       b->ptr);
+
+	/* Just fucken' paranoid, honestly... */
+	_mem_block_verify(b, LIST_ALLOC, file, line);
+
+	/* Add a new slot to the end of the free list */
+	_array_resize((void **)&memory.free_arr,
+		      sizeof(*memory.free_arr),
+		      memory.free_cnt,
+		      ++memory.free_cnt);
 
 	/*
-	 * If the array is empty, or we simply
-	 * couldn't find it, allocate more space!
+	 * Copy the data over to the newly-created slot,
+	 * but change the `file` and `line` variables
+	 * to reflect the point at which it was freed.
 	 */
-	psz = memory.cnt;
-	nsz = sizeof(*memory.arr) * ++memory.cnt;
-	if (!psz) {
-		assert(!memory.arr);
-		a = malloc(nsz);
-		assert(a);
-		memory.arr = (struct block *)a;
-	} else {
-		assert(memory.arr);
-		a = realloc(memory.arr, nsz);
-		assert(a);
-		memory.arr = (struct block *)a;
+	{
+		struct block *t = memory.free_arr + (memory.free_cnt - 1);
+
+		*t = *b;
+
+		/* Most importantly, ACTUALLY FREE THE FUCKING POINTER! */
+		free(t->ptr);
+
+		t->file = file;
+		t->line = (u32)line;
 	}
 
-	return _mem_block_get_last(file, line);
+	/* Remove that slot from the alloc array and shift it all down */
+	for (i = aind; i < memory.alloc_cnt; ++i) {
+		/* If it's the last element in our array, we're good */
+		if (i + 1ul >= memory.alloc_cnt)
+			break;
+
+		/* Otherwise, just bucket-brigade the shit down */
+		memory.alloc_arr[i] = memory.alloc_arr[i + 1];
+	}
+
+	/* Then resize the array like nothing ever happened. :D */
+	_array_resize((void **)&memory.alloc_arr,
+		      sizeof(*memory.alloc_arr),
+		      memory.alloc_cnt,
+		      --memory.alloc_cnt);
 }
 
 /********************
@@ -510,7 +568,7 @@ void _mem_register_exit_callback_internal(const char *file, const int line)
 	mem_assertm(!(flags & FLAG_HAS_CALLBACK),
 		    "Callback was already registered");
 
-	_mem_debugf("Registered exit callback at %s:%d\n", file, line);
+	mem_debugf("Registered exit callback at %s:%d\n", file, line);
 	atexit(_mem_atexit);
 
 	flags |= FLAG_HAS_CALLBACK;
@@ -534,16 +592,33 @@ void *_mem_alloc_internal(const size_t sz, const char *file, const int line)
 
 	mem_assertm_ex(sz, file, line, "Trying to allocate 0 bytes!");
 
-	s = _mem_free_block_first_get(file, line);
+	/* Grow the array from the allocation */
+	_array_resize((void **)&memory.alloc_arr,
+		      sizeof(*memory.alloc_arr),
+		      memory.alloc_cnt,
+		      ++memory.alloc_cnt);
+
+	/* Get the new empty slot from the end of it */
+	s = memory.alloc_arr + memory.alloc_cnt - 1;
+	_mem_block_set_empty(s);
+#if 0
+	_mem_block_verify(s, LIST_ALLOC, file, line);
+#endif
+
+	/* Set it up with the allocation data */
 	p = malloc(sz);
 	assert(p);
 	s->ptr	= p;
 	s->sz	= sz;
 	s->file = file;
 	s->line = (u32)line;
+#if 0
+	_mem_block_verify(s, LIST_ALLOC, file, line);
+#endif
 
-	_mem_debugf("mem_alloc(%lu) -> <%p> %s:%d\n", sz, p, file, line);
+	mem_debugf("mem_alloc(%lu) -> <%p> %s:%d\n", sz, p, file, line);
 
+	/* Send the user pointer on it's way to the caller. */
 	return p;
 }
 
@@ -551,12 +626,34 @@ void _mem_free_internal(void *ptr, const char *file, const int line)
 {
 	struct block *s;
 
-	assert(flags & FLAG_IS_INIT);
+	mem_assertm_ex(flags & FLAG_IS_INIT,
+		       file,
+		       line,
+		       "No allocation was previously made, "
+		       "so there's nothing to free.");
+	mem_assertm_ex(ptr, file, line, "Trying to free a NULL pointer");
 
-	assert(ptr);
+	/*
+	 * Make sure that it's not in the free list.
+	 * If so, that would be considered a double-free!
+	 */
+	s = _mem_get_block_from_user_ptr(ptr, LIST_FREE, file, line);
+	if (s) {
+		mem_debugf("Trying to double-free pointer "
+			   "<%p>\n\tOriginally freed at %s:%d\n",
+			   s->ptr,
+			   s->file,
+			   s->line);
+		abort();
+	}
 
-	s = _mem_block_from_pointer(ptr, file, line);
-	assert(s);
+	s = _mem_get_block_from_user_ptr(ptr, LIST_ALLOC, file, line);
+	mem_assertf(s,
+		    file,
+		    line,
+		    "Failed to get allocated block from user pointer <%p>",
+		    ptr);
 
-	_mem_block_pointer_free(s, FALSE, file, line);
+	_mem_move_block_to_free_list(s, file, line);
+	/*_mem_block_pointer_free(s, FALSE, file, line);*/
 }
