@@ -1,5 +1,5 @@
-#ifndef _INT_TYPES_H_
-#define _INT_TYPES_H_
+#ifndef _TYPES_H_
+#define _TYPES_H_
 
 #define STATIC_ASSERT(_cond, _msg)                                             \
 	extern char static_assert_fail_##_msg[(_cond) ? 1 : -1]
@@ -12,6 +12,23 @@ typedef signed short   s16;
 
 typedef unsigned int u32;
 typedef signed int   s32;
+
+typedef float  f32;
+typedef double f64;
+
+/* Boolean */
+#ifdef FALSE
+#error "\"FALSE\" is already defined!"
+#endif /* #ifdef FALSE */
+
+#ifdef TRUE
+#error "\"TRUE\" is already defined!"
+#endif /* #ifdef TRUE */
+
+#define FALSE 0
+#define TRUE  1
+
+typedef unsigned char bool_t;
 
 #ifdef __WIN32__
 
@@ -48,13 +65,16 @@ typedef signed long long   s64;
 
 #endif /* #ifdef __WIN32__ #elif defined(__linux__) #else */
 
+STATIC_ASSERT(sizeof(bool_t) == 1, bool_t_must_be_1_bytes);
 STATIC_ASSERT(sizeof(u8) == 1, u8_must_be_1_bytes);
 STATIC_ASSERT(sizeof(s8) == 1, s8_must_be_1_bytes);
 STATIC_ASSERT(sizeof(u16) == 2, u16_must_be_2_bytes);
 STATIC_ASSERT(sizeof(s16) == 2, s16_must_be_2_bytes);
 STATIC_ASSERT(sizeof(u32) == 4, u32_must_be_4_bytes);
 STATIC_ASSERT(sizeof(s32) == 4, s32_must_be_4_bytes);
+STATIC_ASSERT(sizeof(f32) == 4, f32_must_be_4_bytes);
 STATIC_ASSERT(sizeof(u64) == 8, u64_must_be_8_bytes);
 STATIC_ASSERT(sizeof(s64) == 8, s64_must_be_8_bytes);
+STATIC_ASSERT(sizeof(f64) == 8, f64_must_be_4_bytes);
 
-#endif /* #ifndef _INT_TYPES_H_ */
+#endif /* #ifndef _TYPES_H_ */
