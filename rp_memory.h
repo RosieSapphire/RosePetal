@@ -1,24 +1,156 @@
-#ifndef _MEMORY_ALLOCATOR_H_
-#define _MEMORY_ALLOCATOR_H_
-
 /*
- * Just a custom memory allocation wrapper I wrote for the sake of debugging
- * memory leaks and where/when/how much memory was allocated and what- if
- * anything- went wrong.
+ * The memory allocator/debugger module for Rose Petal.
+ * It keeps track of how much memory you currently have allocated,
+ * how much you've freed, what blocks were left over in memory
+ * upon exiting the program, among other useful stuff!
  *
- * Make sure to define `MEMORY_ALLOCATOR_WRAP_STDLIB` in order to wrap
- * calls to `malloc()` and `free()` with `mem_alloc()` and `mem_free()`.
- * Disablind this macro will just use them like you normally would,
- * effictively disabling this library- unless the functions are called
- * directly- freeing up performance for release mode.
+ * Below is a list of the macros required to make this file work...
+ *
+ * NOTE: There is some parity between the way these macros
+ *	 interact with each other, but it will error out if you
+ * 	 try to do anything *particularly* catastrophic. lol
+ *
+ * RP_MEMORY_IMPLEMENTATION:
+ *	The cornerstone of any header-only library is the ole' IMPLEMENTATION
+ *	macro that has to be defined before even including it. If you don't
+ *	do this, none of the functions will be made visibile.
+ *
+ *	IMPORTANT: Make sure you only ever define this macro in
+ *	           ONE C file that gets linked with any given
+ *	           program, otherwise the linker will bitch at
+ *	           you for a multiple definition thingy-majiggy.
+ *
+ *	If you wanna include this file in any other translation units, you
+ *	can do that just fine, just make sure not to re-define this macro.
+ *
+ *	NOTE: All the below macros assume this one is defined.
+ *
+ * RP_MEMORY_WRAP_STDLIB:
+ *	Probably the most important macro if you
+ *	plan on using this for a serious project.
+ *
+ *	Essentially, by default, in order to call the allocation and freeing
+ *	functions for this module, you'd have to type `mem_alloc()` and
+ *	`mem_free()` respectively. However, if you want to effectively
+ *	"toggle" this module, all you have to do is define this before
+ *	including and you'll
+ *
+ * RP_MEMORY_LOG:
+ *	Use `stdout` to print information about the debugger as it goes.
+ *	This will give all your basic stuff, like when you allocate a new
+ *	block, when you free one, if you fucked up and accidentally freed
+ *	a block twice, and potentially even if you accessed it out of range.
+ *
+ * RP_MEMORY_LOG_VERBOSE:
+ *	I could bullshit you and say this is for more "advanced" debugging,
+ *	but the be honest, I put it in here as a way to spit out as much
+ *	terminal output about whatever problem I'm having in the hopes of
+ *	figuring it out.
+ *
+ *	Honestly, it's shit, don't bother with it.
+ *	You're better with a proper debugger. I haven't
+ *	bothered to remove it because I'm fucking lazy.
+ *	Sue me.
+ *
+ *	NOTE: This macro can ONLY be defined if `RP_MEMORY_LOG` is.
+ *
+ * RP_MEMORY_LOG_END_ONLY:
+ *	This is for if you ONLY wanna know what's happening with the memory
+ *	after the program is over. Similar to valgrind or address-sanitizer,
+ *	it just prints out how many blocks were still in use at the end of
+ *	the program and nothing more; skips all the intermediate printing.
+ *
+ *	This is what you'll wanna use 90% of the time, unless
+ *	you need a proper roadmap of every allocation happening
+ *	in the program, then just use `RP_MEMORY_LOG`.
+ *
+ *	NOTE: This macro can ONLY be defined if `RP_MEMORY_LOG`
+ *	      and `RP_MEMORY_LOG_VERBOSE` are NOT defined.
+ *
+ * RP_MEMORY_TEST:
+ *	This defines a function called `rp_memory_test()` which you can call
+ *	anywhere in your program to run the test code for this module. This
+ *	is really only ever used for internal use, specifically for `test.c`
+ *	in the repository, but here's a macro to define it so you can have
+ *	it anywhere in your program. Have a ball.
+ *
+ *	NOTE: This macro can ONLY be defined if `RP_MEMORY_TEST_ALLOC_CNT`
+ *	      is also defined. That's a necessary part of the test.
+ *	      More information about that one below.
+ *
+ * RP_MEMORY_TEST_ALLOC_CNT:
+ *	This define is required for `RP_MEMORY_TEST` to work.
+ *	This MUST be defined with an integer value (preferably
+ *	suffixed with `ul`) or it won't be able to compile.
+ *
+ * RP_MEMORY_TEST_SIMULATE_LEAK:
+ *	An optional define for `RP_MEMORY_TEST` that makes it
+ *	so it leaves a few blocks left in memory after the
+ *	test to see how it reacts to having memory left over.
+ *
+ *	You could also just be a lazy fuck and not
+ *	free your memory, but the choice is yours.
+ *
+ * Oh yeah, and this is all provided, like, "as is" or whatever.
+ * I dunno, I was never really good with licenses. ¯\_(ツ)_/¯
  */
 
+#ifndef _RP_MEMORY_H_
+#define _RP_MEMORY_H_
+
+/*
+ * Before doing anything, we must handle macro parity!
+ */
+#ifdef RP_MEMORY_LOG
+#ifdef RP_MEMORY_LOG_END_ONLY
+#error "You cannot define `RP_MEMORY_LOG_END_ONLY` if `RP_MEMORY_LOG` is already defined; pick one or the other."
+#endif /* #ifdef RP_MEMORY_LOG_END_ONLY */
+#else  /* #ifndef RP_MEMORY_LOG */
+#ifdef RP_MEMORY_LOG_VERBOSE
+#error "You cannot defined `RP_MEMORY_LOG_VERBOSE` if `RP_MEMORY_LOG` isn't defined first."
+#endif /* #ifdef RP_MEMORY_LOG_VERBOSE */
+#endif /* #ifndef RP_MEMORY_LOG #else */
+
+#if defined(RP_MEMORY_LOG_VERBOSE) && defined(RP_MEMORY_LOG_END_ONLY)
+#error "There's no valid reason to defined `RP_MEMORY_LOG_VERBOSE` when `RP_MEMORY_LOG_END_ONLY` is defined."
+#endif /* #if defined(RP_MEMORY_LOG_VERBOSE) &&                                \
+	  defined(RP_MEMORY_LOG_END_ONLY) */
+
+#ifdef RP_MEMORY_TEST
+#ifndef RP_MEMORY_TEST_ALLOC_CNT
+#error "In order for `RP_MEMORY_TEST` to work, `RP_MEMORY_TEST_ALLOC_CNT` must be defined with an integer value."
+#else /* #ifndef RP_MEMORY_TEST_ALLOC_CNT */
+#if !RP_MEMORY_TEST_ALLOC_CNT
+#error "`RP_MEMORY_TEST_ALLOC_CNT` must be greater than 0."
+#endif /* #if !RP_MEMORY_TEST_ALLOC_CNT */
+#endif /* #ifndef RP_MEMORY_TEST_ALLOC_CNT #else */
+#ifndef RP_MEMORY_IMPLEMENTATION
+#error "In order for `RP_MEMORY_TEST` to work, `RP_MEMORY_IMPLEMENTATION` must be defined, otherwise the function won't exist."
+#endif /* #ifndef RP_MEMORY_IMPLEMENTATION */
+#else  /* #ifdef RP_MEMORY_TEST */
+#ifdef RP_MEMORY_TEST_SIMULATE_LEAK
+#error "`RP_MEMORY_TEST_SIMULATE_LEAK` has no reason to be defined if `RP_MEMORY_TEST` isn't."
+#endif /* #ifdef RP_MEMORY_TEST_SIMULATE_LEAK */
+#ifdef RP_MEMORY_TEST_ALLOC_CNT
+#error "`RP_MEMORY_TEST_ALLOC_CNT` has no reason to be defined if `RP_MEMORY_TEST` isn't."
+#endif /* #ifdef RP_MEMORY_TEST_ALLOC_CNT */
+#endif /* #ifdef RP_MEMORY_TEST #else */
+
+ /*
+  * God fucking DAMN that was ugly!
+  * Alright then, moving on.
+  */
+
 #include <stddef.h>
+
+ /********************************
+  * PUBLIC FUNCTION DECLARATIONS *
+  ********************************/
 
 /*
  * Registeres the internal exit callback for the memory allocator
  * which makes sure to clean up and memory left behind and notify
- * you about any pointers you forgot to free (ya greasy bastard. lol).
+ * you about any pointers you forgot to free (ya greasy bastard).
  */
 extern void _mem_register_exit_callback_internal(const char *file,
 						 const int   line);
@@ -48,7 +180,7 @@ _mem_alloc_internal(const size_t sz, const char *file, const int line);
  */
 extern void _mem_free_internal(void *ptr, const char *file, const int line);
 
-#ifdef MEMORY_ALLOCATOR_IMPLEMENTATION
+#ifdef RP_MEMORY_IMPLEMENTATION
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -58,11 +190,7 @@ extern void _mem_free_internal(void *ptr, const char *file, const int line);
 
 #include "rp_types.h"
 
-/******************************************************************************
- * TODO:                                                                      *
- ******************************************************************************/
-
-#define ASSERT_WHICH_IS_VALID(_which, _file, _line)                            \
+#define _ASSERT_WHICH_IS_VALID(_which, _file, _line)                           \
 	mem_assertf_ex(_which == LIST_ALLOC || _which == LIST_FREE,            \
 		       _file,                                                  \
 		       _line,                                                  \
@@ -105,10 +233,10 @@ static internal_flags_e flags = FLAGS_NONE;
  *********************/
 
 /*
- * Prints a formatted message to STDOUT only if `ALLOCATOR_LOG` is defined.
+ * Prints a formatted message to STDOUT only if `RP_MEMORY_LOG` is defined.
  */
-#if defined(ALLOCATOR_LOG) ||                                                  \
-		(!defined(ALLOCATOR_LOG) && defined(ALLOCATOR_LOG_END_ONLY))
+#if defined(RP_MEMORY_LOG) ||                                                  \
+		(!defined(RP_MEMORY_LOG) && defined(RP_MEMORY_LOG_END_ONLY))
 static void _mem_debugf_internal(const char *fmt, ...)
 {
 	va_list args;
@@ -119,15 +247,15 @@ static void _mem_debugf_internal(const char *fmt, ...)
 	(void)vfprintf(stdout, fmt, args);
 	va_end(args);
 }
-#endif /* #if defined(ALLOCATOR_LOG) ||                                        \
-	      (!defined(ALLOCATOR_LOG) &&                                      \
-	       defined(ALLOCATOR_LOG_END_ONLY)) */
+#endif /* #if defined(RP_MEMORY_LOG) ||                                        \
+	      (!defined(RP_MEMORY_LOG) &&                                      \
+	       defined(RP_MEMORY_LOG_END_ONLY)) */
 
-#ifdef ALLOCATOR_LOG
+#ifdef RP_MEMORY_LOG
 #define mem_debugf(...) _mem_debugf_internal(__VA_ARGS__)
-#else /* #ifdef ALLOCATOR_LOG */
+#else /* #ifdef RP_MEMORY_LOG */
 #define mem_debugf(...) (void)0
-#endif /* #ifdef ALLOCATOR_LOG #else */
+#endif /* #ifdef RP_MEMORY_LOG #else */
 
 /*
  * Stupid fucking hack for making it so that,
@@ -136,15 +264,15 @@ static void _mem_debugf_internal(const char *fmt, ...)
  * logging every single allocation made since
  * the beginning of the program.
  */
-#ifdef ALLOCATOR_LOG
+#ifdef RP_MEMORY_LOG
 #define mem_debugf_end(...) _mem_debugf_internal(__VA_ARGS__)
-#else /* #ifdef ALLOCATOR_LOG */
-#ifdef ALLOCATOR_LOG_END_ONLY
+#else /* #ifdef RP_MEMORY_LOG */
+#ifdef RP_MEMORY_LOG_END_ONLY
 #define mem_debugf_end(...) _mem_debugf_internal(__VA_ARGS__)
-#else /* #ifdef ALLOCATOR_LOG_END_ONLY */
+#else /* #ifdef RP_MEMORY_LOG_END_ONLY */
 #define mem_debugf_end(...) (void)0
-#endif /* #ifdef ALLOCATOR_LOG_END_ONLY #else */
-#endif /* #ifdef ALLOCATOR_LOG #else */
+#endif /* #ifdef RP_MEMORY_LOG_END_ONLY #else */
+#endif /* #ifdef RP_MEMORY_LOG #else */
 
 #define mem_assertf_ex(_cond, _file, _line, ...)                               \
 	_mem_assertf_internal(!!(_cond), #_cond, _file, _line, __VA_ARGS__)
@@ -165,7 +293,7 @@ static void _mem_assertf_internal(const bool_t cond,
 				  const char  *fmt,
 				  ...)
 {
-#ifdef ALLOCATOR_LOG
+#ifdef RP_MEMORY_LOG
 	va_list args;
 
 	if (cond)
@@ -183,13 +311,13 @@ static void _mem_assertf_internal(const bool_t cond,
 	(void)fprintf(stderr, "\n");
 	va_end(args);
 	abort();
-#else  /* #ifdef ALLOCATOR_LOG */
+#else  /* #ifdef RP_MEMORY_LOG */
 	(void)cond;
 	(void)cond_str;
 	(void)file;
 	(void)line;
 	(void)fmt;
-#endif /* #ifdef ALLOCATOR_LOG #else */
+#endif /* #ifdef RP_MEMORY_LOG #else */
 }
 
 /*
@@ -222,7 +350,7 @@ static void _mem_block_verify(const struct block *b,
 	size_t	      cnt = SIZE_MAX, ind = SIZE_MAX;
 	const bool_t  is_alloc = (which == LIST_ALLOC);
 
-	ASSERT_WHICH_IS_VALID(which, file, line);
+	_ASSERT_WHICH_IS_VALID(which, file, line);
 	arr = is_alloc ? memory.alloc_arr : memory.free_arr;
 	cnt = is_alloc ? memory.alloc_cnt : memory.free_cnt;
 
@@ -236,9 +364,9 @@ static void _mem_block_verify(const struct block *b,
 		       is_alloc ? "ALLOC" : "FREE",
 		       cnt);
 
-#ifdef ALLOCATOR_LOG_VERBOSE
+#ifdef RP_MEMORY_LOG_VERBOSE
 	mem_debugf("Verifying memory slot %lu\n", ind);
-#endif /* #ifdef ALLOCATOR_LOG_VERBOSE */
+#endif /* #ifdef RP_MEMORY_LOG_VERBOSE */
 
 	/* If our pointer is NULL, the rest of our data better match! */
 	if (!b->ptr) {
@@ -304,7 +432,7 @@ static struct block *_mem_block_get(const size_t       i,
 	struct block *b = NULL;
 	size_t	      cnt;
 
-	ASSERT_WHICH_IS_VALID(which, file, line);
+	_ASSERT_WHICH_IS_VALID(which, file, line);
 	cnt = (which == LIST_ALLOC) ? memory.alloc_cnt : memory.free_cnt;
 
 	mem_assertf_ex(i < cnt,
@@ -315,14 +443,14 @@ static struct block *_mem_block_get(const size_t       i,
 		       (which == LIST_ALLOC) ? "ALLOC" : "FREE",
 		       cnt);
 
-#ifdef ALLOCATOR_LOG_VERBOSE
+#ifdef RP_MEMORY_LOG_VERBOSE
 	mem_debugf("Got block at index %lu @ %s:%d\n", i, file, line);
-#else  /* #ifdef ALLOCATOR_LOG_VERBOSE */
+#else  /* #ifdef RP_MEMORY_LOG_VERBOSE */
 	(void)file;
 	(void)line;
-#endif /* #ifdef ALLOCATOR_LOG_VERBOSE #else */
+#endif /* #ifdef RP_MEMORY_LOG_VERBOSE #else */
 
-	ASSERT_WHICH_IS_VALID(which, file, line);
+	_ASSERT_WHICH_IS_VALID(which, file, line);
 
 	b = ((which == LIST_ALLOC) ? memory.alloc_arr : memory.free_arr) + i;
 	_mem_block_verify(b, which, file, line);
@@ -345,7 +473,7 @@ static struct block *_mem_get_block_from_user_ptr(const void	    *ptr,
 {
 	size_t i, cnt;
 
-	ASSERT_WHICH_IS_VALID(which, file, line);
+	_ASSERT_WHICH_IS_VALID(which, file, line);
 
 	cnt = (which == LIST_ALLOC) ? memory.alloc_cnt : memory.free_cnt;
 
@@ -369,7 +497,7 @@ static void _mem_block_set_empty(struct block *b, const which_list_e w)
 	size_t	      cnt;
 	const bool_t  is_alloc = (w == LIST_ALLOC);
 
-	ASSERT_WHICH_IS_VALID(w, __FILE__, __LINE__);
+	_ASSERT_WHICH_IS_VALID(w, __FILE__, __LINE__);
 
 	arr  = is_alloc ? memory.alloc_arr : memory.free_arr;
 	cnt  = is_alloc ? memory.alloc_cnt : memory.free_cnt;
@@ -652,10 +780,10 @@ void _mem_register_exit_callback_internal(const char *file, const int line)
 	mem_assertf(!(flags & FLAG_HAS_CALLBACK),
 		    "Callback was already registered");
 
-#ifndef ALLOCATOR_LOG
+#ifndef RP_MEMORY_LOG
 	(void)file;
 	(void)line;
-#endif /* #ifndef ALLOCATOR_LOG */
+#endif /* #ifndef RP_MEMORY_LOG */
 
 	mem_debugf("Registered exit callback at %s:%d\n", file, line);
 	atexit(_mem_atexit);
@@ -762,7 +890,84 @@ void _mem_free_internal(void *ptr, const char *file, const int line)
 		   line);
 	_mem_move_block_to_free_list(s, file, line);
 }
-#endif /* #ifdef MEMORY_ALLOCATOR_IMPLEMENTATION */
+
+#ifdef RP_MEMORY_TEST
+static void rp_memory_test(void)
+{
+#ifdef malloc
+#error "MEM_TEST: `malloc` as a macro was already defined elsewhere"
+#endif /* #ifdef malloc */
+
+#ifdef free
+#error "MEM_TEST: `free` as a macro was already defined elsewhere"
+#endif /* #ifdef free */
+
+#define malloc(_sz) _mem_alloc_internal(_sz, __FILE__, __LINE__)
+#define free(_sz)   _mem_free_internal(_sz, __FILE__, __LINE__)
+
+	static u32 *ptr_test[RP_MEMORY_TEST_ALLOC_CNT] = { NULL };
+	size_t	    i;
+
+	fprintf(stdout, "\n[TEST] rp_memory.h:\n\n");
+
+	_mem_register_exit_callback_internal(__FILE__, __LINE__);
+
+	rp_random_seed(UINT32_MAX);
+
+	/* Allocate a bunch of memory */
+	for (i = 0ul; i < RP_MEMORY_TEST_ALLOC_CNT; ++i) {
+		size_t j;
+		u8     num;
+
+		do {
+			num = rp_random_u8();
+		} while (!num);
+
+		ptr_test[i] = (u32 *)malloc(sizeof(**ptr_test) * num);
+		assert(ptr_test[i]);
+
+		/* 2/3 of the time, just continue like normal */
+		if (rp_random_u32() % 3) {
+			for (j = 0ul; j < num; ++j)
+				*(ptr_test[i]) = rp_random_u32();
+
+			continue;
+		}
+
+		/*
+		 * The other 1/3 of the time, go through all that's currently
+		 * allocated, and randomly (another 50%) free those pointers.
+		 */
+		for (j = 0ul; j <= i; ++j) {
+			if (rp_random_bool_50_percent())
+				continue;
+
+			if (!ptr_test[j])
+				continue;
+
+			free(ptr_test[j]);
+			ptr_test[j] = NULL;
+		}
+	}
+
+	/* Free all of it */
+#ifndef RP_MEMORY_TEST_SIMULATE_LEAK
+	for (i = 0ul; i < RP_MEMORY_TEST_ALLOC_CNT; ++i) {
+		if (!ptr_test[i])
+			continue;
+
+		free(ptr_test[i]);
+		ptr_test[i] = NULL;
+	}
+#endif /* #ifndef RP_MEMORY_TEST_SIMULATE_LEAK */
+#undef free
+#undef malloc
+}
+#endif /* #ifdef RP_MEMORY_TEST */
+
+#undef _ASSERT_WHICH_IS_VALID
+
+#endif /* #ifdef RP_MEMORY_IMPLEMENTATION */
 
 /*
  * Macro defines for wrapping the calls to `_mem_*_internal()` by giving
@@ -774,9 +979,18 @@ void _mem_free_internal(void *ptr, const char *file, const int line)
 #define mem_alloc(_sz) _mem_alloc_internal(_sz, __FILE__, __LINE__)
 #define mem_free(_ptr) _mem_free_internal(_ptr, __FILE__, __LINE__)
 
-#ifdef MEMORY_ALLOCATOR_WRAP_STDLIB
+#ifdef RP_MEMORY_WRAP_STDLIB
 #define malloc(_sz) mem_alloc(_sz)
 #define free(_sz)   mem_free(_sz)
-#endif /* #ifdef MEMORY_ALLOCATOR_WRAP_STDLIB */
+#endif /* #ifdef RP_MEMORY_WRAP_STDLIB */
 
-#endif /* #ifndef _MEMORY_ALLOCATOR_H_ */
+#endif /* #ifndef _RP_MEMORY_H_ */
+
+/*
+ * Also, for what it's worth, for as much as I talk shit
+ * about forgetting to free your memory, most of the time
+ * it's actually me who's making that mistake. Hence most
+ * of the reason I decided to make this in the first place.
+ *
+ * So don't take it personally, you're doing great! :D
+ */

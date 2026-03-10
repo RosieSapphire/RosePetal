@@ -217,6 +217,8 @@ static __inline f32 rp_random_f32_no(const f32 mag)
 }
 
 #ifdef RP_RANDOM_TEST
+#include <stdio.h>
+
 static __inline void rp_random_test(void)
 {
 	s32 s32_min, s32_max;
@@ -234,7 +236,7 @@ static __inline void rp_random_test(void)
 		u32_max = rp_random_u32();
 	} while (u32_max <= u32_min);
 
-	printf("[TEST] rp_random.h:\n\n");
+	printf("\n[TEST] rp_random.h:\n\n");
 	printf("S32: %d\n", rp_random_s32());
 	printf("U32: %u\n", rp_random_u32());
 	printf("S16: %d\n", rp_random_s16());

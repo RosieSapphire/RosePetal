@@ -1,15 +1,8 @@
 DEBUG ?= 1
 
-RP_RANDOM_LOG  ?=
-RP_RANDOM_TEST ?= 1
-
-RP_MEM_LOG          ?= 1
-RP_MEM_LOG_END_ONLY ?=
-RP_MEM_LOG_VERBOSE  ?=
-
-# Library
-LIB_NAME := memory_allocator
-LIB_H    := $(LIB_NAME).h
+# Libraries
+RP_RANDOM_H := rp_random.h
+RP_MEMORY_H := rp_memory.h
 
 # Test
 PROG_NAME := test
@@ -30,31 +23,11 @@ else
 	CFLAGS += -O3 -g0 -DNDEBUG
 endif
 
-ifdef RP_RANDOM_LOG
-	CFLAGS += -DRP_RANDOM_LOG
-endif
-
-ifdef RP_RANDOM_TEST
-	CFLAGS += -DRP_RANDOM_TEST
-endif
-
-ifdef RP_MEM_LOG
-	CFLAGS += -DALLOCATOR_LOG
-	ifdef RP_MEM_LOG_VERBOSE
-		CFLAGS += -DALLOCATOR_LOG_VERBOSE
-	endif
-else
-	ifdef RP_MEM_LOG_END_ONLY
-		CFLAGS += -DALLOCATOR_LOG_END_ONLY
-	endif
-endif
-
-
 all: $(PROG_ELF)
 
-$(PROG_ELF): $(TEST_O)
+$(PROG_ELF): $(TEST_O) $(RP_MEMORY_H)
 	@echo "    [LD] $@"
-	@$(CC) $(CFLAGS) -o $@ $^
+	@$(CC) $(CFLAGS) -o $@ $<
 
 $(TEST_O): $(TEST_C)
 	@echo "    [CC] $<"
