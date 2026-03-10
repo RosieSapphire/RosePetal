@@ -317,13 +317,13 @@ static void _mem_block_verify(const struct block *b,
 	rp_assertf_ex(ind < cnt,
 		      file,
 		      line,
-		      "Index %lu is out of range of %s list! (Max is %lu)",
+		      "Index %zu is out of range of %s list! (Max is %zu)",
 		      ind,
 		      is_alloc ? "ALLOC" : "FREE",
 		      cnt);
 
 #ifdef RP_MEMORY_LOG_VERBOSE
-	mem_debugf("Verifying memory slot %lu\n", ind);
+	mem_debugf("Verifying memory slot %zu\n", ind);
 #endif /* #ifdef RP_MEMORY_LOG_VERBOSE */
 
 	/* If our pointer is NULL, the rest of our data better match! */
@@ -396,13 +396,13 @@ static struct block *_mem_block_get(const size_t       i,
 	rp_assertf_ex(i < cnt,
 		      file,
 		      line,
-		      "Block index %lu from %s list is invalid! (Max is %lu)",
+		      "Block index %zu from %s list is invalid! (Max is %zu)",
 		      i,
 		      (which == LIST_ALLOC) ? "ALLOC" : "FREE",
 		      cnt);
 
 #ifdef RP_MEMORY_LOG_VERBOSE
-	mem_debugf("Got block at index %lu @ %s:%d\n", i, file, line);
+	mem_debugf("Got block at index %zu @ %s:%d\n", i, file, line);
 #else  /* #ifdef RP_MEMORY_LOG_VERBOSE */
 	(void)file;
 	(void)line;
@@ -467,7 +467,7 @@ static void _mem_block_set_empty(struct block *b, const which_list_e w)
 	rp_assertf(b, "Block pointer in %s list is NULL", wstr);
 	rp_assertf((size_t)(b - arr) < cnt,
 		   "Block pointer <%p> is out of range of memory block "
-		   "array for %s; (is %lu, should be less than %lu)",
+		   "array for %s; (is %zu, should be less than %zu)",
 		   b,
 		   wstr,
 		   (size_t)(b - arr),
@@ -672,7 +672,7 @@ static void _mem_atexit(void)
 	}
 
 	mem_debugf_end("\n");
-	mem_debugf_end("WARNING: %d BLOCKS STILL ACTIVE AT EXIT:\n",
+	mem_debugf_end("WARNING: %zu BLOCKS STILL ACTIVE AT EXIT:\n",
 		       memory.alloc_cnt);
 
 	i = 0ul;
@@ -683,15 +683,15 @@ static void _mem_atexit(void)
 						 __LINE__);
 		rp_assertf(s,
 			   "Failed to get active memory block in "
-			   "terminate function at index %lu\n",
+			   "terminate function at index %zu\n",
 			   i);
 		rp_assertf(s->ptr,
-			   "Block [p:<%p> i:%lu is in active "
+			   "Block [p:<%p> i:%zu is in active "
 			   "list, but its pointer is NULL.",
 			   s,
 			   i);
 
-		mem_debugf_end("\tLEAK %lu: [p:<%p> sz:%lu] %s:%u\n",
+		mem_debugf_end("\tLEAK %zu: [p:<%p> sz:%zu] %s:%u\n",
 			       i,
 			       s->ptr,
 			       s->sz,
@@ -795,7 +795,7 @@ void *_rp_mem_alloc_internal(const size_t sz, const char *file, const int line)
 	_mem_block_verify(s, LIST_ALLOC, file, line);
 
 	p = malloc(sz);
-	rp_assertf(p, "Failed to allocate pointer of size %lu", sz);
+	rp_assertf(p, "Failed to allocate pointer of size %zu", sz);
 
 	/*
 	 * When allocating a new pointer, check to see if the
@@ -820,7 +820,7 @@ void *_rp_mem_alloc_internal(const size_t sz, const char *file, const int line)
 	s->line = (u32)line;
 	_mem_block_verify(s, LIST_ALLOC, file, line);
 
-	mem_debugf("rp_mem_alloc(%lu) -> <%p> %s:%d\n", sz, p, file, line);
+	mem_debugf("rp_mem_alloc(%zu) -> <%p> %s:%d\n", sz, p, file, line);
 
 	/* Send the user pointer on it's way to the caller. */
 	return p;
@@ -857,7 +857,7 @@ void _rp_mem_free_internal(void *ptr, const char *file, const int line)
 		   line,
 		   "Failed to get allocated block from user pointer <%p>",
 		   ptr);
-	mem_debugf("rp_mem_free(<%p>) [sz:%lu] %s:%d\n",
+	mem_debugf("rp_mem_free(<%p>) [sz:%zu] %s:%d\n",
 		   s->ptr,
 		   s->sz,
 		   file,
@@ -902,7 +902,7 @@ static void rp_memory_test(void)
 		ptr_test[i] = (u32 *)malloc(sizeof(**ptr_test) * num);
 		rp_assertf(ptr_test[i],
 			   "Failed to allocate pointer "
-			   "test index %lu of size %lu",
+			   "test index %zu of size %zu",
 			   i,
 			   sizeof(**ptr_test) * num);
 
@@ -948,6 +948,10 @@ static void rp_memory_test(void)
 #undef _ASSERT_WHICH_IS_VALID
 
 #endif /* #ifdef RP_MEMORY_IMPLEMENTATION */
+
+/*************************
+ * PUBLIC MACRO WRAPPERS *
+ *************************/
 
 /*
  * Macro defines for wrapping the calls to `_mem_*_internal()` by giving
