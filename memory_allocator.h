@@ -412,6 +412,8 @@ static void _array_resize(void	     **arr_ptr,
 	assert(arr_ptr);
 	arr = *arr_ptr;
 
+	assert(elem_size);
+
 	psz = elem_cnt_old * elem_size;
 	nsz = elem_cnt_new * elem_size;
 
@@ -420,16 +422,17 @@ static void _array_resize(void	     **arr_ptr,
 	if (!psz && nsz) { /* Allocate a fresh array */
 		assert(!arr);
 		arr = malloc(nsz);
+		assert(arr);
 	} else if (psz && nsz) { /* Reallocate the existing array */
 		assert(arr);
 		arr = realloc(arr, nsz);
+		assert(arr);
 	} else if (psz && !nsz) { /* Free the now-empty array */
 		assert(arr);
 		free(arr);
 		arr = NULL;
 	} else {
-		fprintf(stderr, "INVALID ARRAY CONFIGURATION!\n");
-		abort();
+		assert(0 && "INVALID ARRAY CONFIGURATION!");
 	}
 
 	*arr_ptr = arr;
@@ -468,6 +471,7 @@ static size_t _array_remove(void       **arr_ptr,
 	 * New method: 1.0746 sec
 	 *
 	 * Result: ~4% performance improvement
+	 * NOTE: this was measured in debug mode with assertions turned on.
 	 */
 
 #if 0
