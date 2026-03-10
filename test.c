@@ -4,9 +4,8 @@
 #include "types.h"
 #include "random.h"
 
-#if 1
 #define MEMORY_ALLOCATOR_WRAP_STDLIB
-#endif
+#define MEMORY_ALLOCATOR_IMPLEMENTATION
 #include "memory_allocator.h"
 
 #define PTR_TEST_CNT 500ul
@@ -14,9 +13,7 @@
 /*
  * Randomly frees only some of the blocks to simulate a lazy-ass programmer
  */
-#if 1
 #define SIMULATE_LEAK
-#endif
 
 static u32 *ptr_test[PTR_TEST_CNT] = { NULL };
 
