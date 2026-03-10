@@ -2,8 +2,9 @@ DEBUG ?= 1
 
 RANDOM_LOG ?=
 
-MEM_LOG         ?= 1
-MEM_LOG_VERBOSE ?=
+MEM_LOG          ?=
+MEM_LOG_END_ONLY ?= 1
+MEM_LOG_VERBOSE  ?=
 
 # Library
 LIB_NAME := memory_allocator
@@ -40,7 +41,12 @@ ifdef MEM_LOG
 	ifdef MEM_LOG_VERBOSE
 		CFLAGS += -DALLOCATOR_LOG_VERBOSE
 	endif
+else
+	ifdef MEM_LOG_END_ONLY
+		CFLAGS += -DALLOCATOR_LOG_END_ONLY
+	endif
 endif
+
 
 all: $(PROG_ELF)
 
