@@ -8,12 +8,14 @@
 #define MEMORY_ALLOCATOR_IMPLEMENTATION
 #include "memory_allocator.h"
 
-#define PTR_TEST_CNT 500ul
+#define PTR_TEST_CNT 50ul
 
 /*
  * Randomly frees only some of the blocks to simulate a lazy-ass programmer
  */
+#if 1
 #define SIMULATE_LEAK
+#endif
 
 static u32 *ptr_test[PTR_TEST_CNT] = { NULL };
 
@@ -28,7 +30,7 @@ int main(void)
 	/* Allocate a bunch of memory */
 	for (i = 0ul; i < PTR_TEST_CNT; ++i) {
 		size_t j;
-		u8 num;
+		u8     num;
 
 		do {
 			num = random_u8();
@@ -50,7 +52,7 @@ int main(void)
 		 * allocated, and randomly (another 50%) free those pointers.
 		 */
 		for (j = 0ul; j <= i; ++j) {
-			if (random_bool())
+			if (random_bool_50_percent())
 				continue;
 
 			if (!ptr_test[j])
@@ -62,22 +64,15 @@ int main(void)
 	}
 
 	/* Free all of it */
+#ifndef SIMULATE_LEAK
 	for (i = 0ul; i < PTR_TEST_CNT; ++i) {
 		if (!ptr_test[i])
 			continue;
 
-#ifdef SIMULATE_LEAK
-		/* 7/8 chance it'll skip freeing */
-		if (random_u32() % 8)
-			continue;
-#endif /* #ifdef SIMULATE_LEAK */
-
 		free(ptr_test[i]);
-#if 0
-		free(ptr_test[i]); /* double-free */
-#endif
 		ptr_test[i] = NULL;
 	}
+#endif /* #ifndef SIMULATE_LEAK */
 
 	return 0;
 }

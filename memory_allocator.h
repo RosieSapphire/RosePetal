@@ -105,11 +105,11 @@ static internal_flags_e flags = FLAGS_NONE;
  *********************/
 
 /*
- * Prints a formatted message to STDERR only if `ALLOCATOR_DEBUG` is defined.
+ * Prints a formatted message to STDERR only if `ALLOCATOR_LOG` is defined.
  */
 static void mem_debugf(const char *fmt, ...)
 {
-#ifdef ALLOCATOR_DEBUG
+#ifdef ALLOCATOR_LOG
 	va_list args;
 
 	assert(fmt);
@@ -117,9 +117,9 @@ static void mem_debugf(const char *fmt, ...)
 	(void)fprintf(stderr, "MEM: ");
 	(void)vfprintf(stderr, fmt, args);
 	va_end(args);
-#else  /* #ifdef ALLOCATOR_DEBUG */
+#else  /* #ifdef ALLOCATOR_LOG */
 	(void)fmt;
-#endif /* #ifdef ALLOCATOR_DEBUG #else */
+#endif /* #ifdef ALLOCATOR_LOG #else */
 }
 
 #define mem_assertf_ex(_cond, _file, _line, _fmt, ...)                         \
@@ -151,7 +151,7 @@ static void _mem_assertf_internal(const bool_t cond,
 				  const char  *fmt,
 				  ...)
 {
-#ifdef ALLOCATOR_DEBUG
+#ifdef ALLOCATOR_LOG
 	va_list args;
 
 	if (cond)
@@ -169,13 +169,13 @@ static void _mem_assertf_internal(const bool_t cond,
 	(void)fprintf(stderr, "\n");
 	va_end(args);
 	abort();
-#else  /* #ifdef ALLOCATOR_DEBUG */
+#else  /* #ifdef ALLOCATOR_LOG */
 	(void)cond;
 	(void)cond_str;
 	(void)file;
 	(void)line;
 	(void)fmt;
-#endif /* #ifdef ALLOCATOR_DEBUG #else */
+#endif /* #ifdef ALLOCATOR_LOG #else */
 }
 
 /*
@@ -222,9 +222,9 @@ static void _mem_block_verify(const struct block *b,
 		       is_alloc ? "ALLOC" : "FREE",
 		       cnt);
 
-#ifdef ALLOCATOR_DEBUG_VERBOSE
+#ifdef ALLOCATOR_LOG_VERBOSE
 	mem_debugf("Verifying memory slot %lu\n", ind);
-#endif /* #ifdef ALLOCATOR_DEBUG_VERBOSE */
+#endif /* #ifdef ALLOCATOR_LOG_VERBOSE */
 
 	/* If our pointer is NULL, the rest of our data better match! */
 	if (!b->ptr) {
@@ -301,12 +301,12 @@ static struct block *_mem_block_get(const size_t       i,
 		       (which == LIST_ALLOC) ? "ALLOC" : "FREE",
 		       cnt);
 
-#ifdef ALLOCATOR_DEBUG_VERBOSE
+#ifdef ALLOCATOR_LOG_VERBOSE
 	mem_debugf("Got block at index %lu @ %s:%d\n", i, file, line);
-#else  /* #ifdef ALLOCATOR_DEBUG_VERBOSE */
+#else  /* #ifdef ALLOCATOR_LOG_VERBOSE */
 	(void)file;
 	(void)line;
-#endif /* #ifdef ALLOCATOR_DEBUG_VERBOSE #else */
+#endif /* #ifdef ALLOCATOR_LOG_VERBOSE #else */
 
 	ASSERT_WHICH_IS_VALID(which, file, line);
 

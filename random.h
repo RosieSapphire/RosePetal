@@ -17,6 +17,7 @@ STATIC_ASSERT(RAND_MAX == INT32_MAX, RAND_MAX_must_equal_INT32_MAX);
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
+#endif /* #ifdef RANDOM_DEBUG */
 
 static __inline void _assertf_internal(const bool_t cond,
 				       const char  *cond_str,
@@ -26,6 +27,7 @@ static __inline void _assertf_internal(const bool_t cond,
 				       const char  *fmt,
 				       ...)
 {
+#ifdef RANDOM_DEBUG
 	va_list args;
 
 	if (cond)
@@ -42,8 +44,17 @@ static __inline void _assertf_internal(const bool_t cond,
 	fprintf(stderr, "\n");
 	va_end(args);
 	abort();
+#else  /* #ifdef RANDOM_DEBUG */
+	(void)cond;
+	(void)cond_str;
+	(void)file;
+	(void)line;
+	(void)func;
+	(void)fmt;
+#endif /* #ifdef RANDOM_DEBUG #else */
 }
 
+#ifdef RANDOM_DEBUG
 #define assertf(_cond, _fmt, ...)                                              \
 	_assertf_internal(_cond,                                               \
 			  #_cond,                                              \
@@ -53,7 +64,11 @@ static __inline void _assertf_internal(const bool_t cond,
 			  _fmt,                                                \
 			  __VA_ARGS__)
 #else /* #ifdef RANDOM_DEBUG */
-#define ASSERTF(...) ((void)0)
+#define assertf(_cond, _fmt, ...)                                              \
+	do {                                                                   \
+		(void)(_cond);                                                 \
+		(void)(_fmt);                                                  \
+	} while (0)
 #endif /* #ifdef RANDOM_DEBUG #else */
 
 /*
@@ -169,7 +184,7 @@ static __inline s8 random_s8(void)
 /*
  * Generates a random boolean with a 50% chance for either TRUE or FALSE
  */
-static __inline bool_t random_bool(void)
+static __inline bool_t random_bool_50_percent(void)
 {
 	return (bool_t)(rand() & 1);
 }

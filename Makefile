@@ -1,5 +1,9 @@
 DEBUG ?= 1
-DEBUG_VERBOSE ?=
+
+RANDOM_LOG ?=
+
+MEM_LOG         ?= 1
+MEM_LOG_VERBOSE ?=
 
 # Library
 LIB_NAME := memory_allocator
@@ -22,13 +26,20 @@ CC     := clang
 CFLAGS := -Wall -Wextra -Weverything -Werror -pedantic -ansi $(WARN_IGNORE)
 
 ifdef DEBUG
-	CFLAGS += -O0 -ggdb3 -D_DEBUG -DALLOCATOR_DEBUG -DRANDOM_DEBUG
-		  # -fsanitize=address,undefined,leak,null
-	ifdef DEBUG_VERBOSE
-		CFLAGS += -DALLOCATOR_DEBUG_VERBOSE
-	endif
+	CFLAGS += -O0 -ggdb3 -D_DEBUG
 else
 	CFLAGS += -O3 -g0 -DNDEBUG
+endif
+
+ifdef RANDOM_LOG
+	CFLAGS += -DRANDOM_DEBUG
+endif
+
+ifdef MEM_LOG
+	CFLAGS += -DALLOCATOR_LOG
+	ifdef MEM_LOG_VERBOSE
+		CFLAGS += -DALLOCATOR_LOG_VERBOSE
+	endif
 endif
 
 all: $(PROG_ELF)
