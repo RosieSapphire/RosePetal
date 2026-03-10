@@ -30,8 +30,8 @@
  *	plan on using this for a serious project.
  *
  *	Essentially, by default, in order to call the allocation and freeing
- *	functions for this module, you'd have to type `mem_alloc()` and
- *	`mem_free()` respectively. However, if you want to effectively
+ *	functions for this module, you'd have to type `rp_mem_alloc()` and
+ *	`rp_mem_free()` respectively. However, if you want to effectively
  *	"toggle" this module, all you have to do is define this before
  *	including and you'll
  *
@@ -136,24 +136,24 @@
 #endif /* #ifdef RP_MEMORY_TEST_ALLOC_CNT */
 #endif /* #ifdef RP_MEMORY_TEST #else */
 
- /*
-  * God fucking DAMN that was ugly!
-  * Alright then, moving on.
-  */
+/*
+ * God fucking DAMN that was ugly!
+ * Alright then, moving on.
+ */
 
 #include <stddef.h>
 
- /********************************
-  * PUBLIC FUNCTION DECLARATIONS *
-  ********************************/
+/********************************
+ * PUBLIC FUNCTION DECLARATIONS *
+ ********************************/
 
 /*
  * Registeres the internal exit callback for the memory allocator
  * which makes sure to clean up and memory left behind and notify
  * you about any pointers you forgot to free (ya greasy bastard).
  */
-extern void _mem_register_exit_callback_internal(const char *file,
-						 const int   line);
+extern void _rp_mem_register_exit_callback_internal(const char *file,
+						    const int	line);
 
 /*
  * Allocates a user pointer of a specified `sz` and returns it.
@@ -161,27 +161,30 @@ extern void _mem_register_exit_callback_internal(const char *file,
  * This function allocates internal memory for storing
  * the blocks, specifically for debugging purposes.
  *
- * If `ALLOCATOR_WRAP_STDLIB` is defined, this function will be called
+ * If `RP_MEMORY_WRAP_STDLIB` is defined, this function will be called
  * by any instances of `malloc()` where this file is included in.
  */
 extern void *
-_mem_alloc_internal(const size_t sz, const char *file, const int line);
+_rp_mem_alloc_internal(const size_t sz, const char *file, const int line);
 
 /*
  * Frees a user pointer that was previously allocated.
  *
- * This function also nullifies the internal memory block
- * the pointer is associated with, _HOWEVER_, it does not
- * free the block itself, as it can be used later to re-allocate
- * another user pointer to.
+ * This function also nullifies the internal memory block the
+ * pointer is associated with, _HOWEVER_, it does not free the
+ * block itself, as it can be used later to re-allocate another
+ * user pointer to. It just moves it over to the "free list"
  *
- * If `ALLOCATOR_WRAP_STDLIB` is defined, this function will be called
+ * If `RP_MEMORY_WRAP_STDLIB` is defined, this function will be called
  * by any instances of `free()` where this file is included in.
  */
-extern void _mem_free_internal(void *ptr, const char *file, const int line);
+extern void _rp_mem_free_internal(void *ptr, const char *file, const int line);
+
+/******************************
+ * IMPLEMENTATION DEFINITIONS *
+ ******************************/
 
 #ifdef RP_MEMORY_IMPLEMENTATION
-#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -191,13 +194,13 @@ extern void _mem_free_internal(void *ptr, const char *file, const int line);
 #include "rp_types.h"
 
 #define _ASSERT_WHICH_IS_VALID(_which, _file, _line)                           \
-	mem_assertf_ex(_which == LIST_ALLOC || _which == LIST_FREE,            \
-		       _file,                                                  \
-		       _line,                                                  \
-		       "The `which_list_e` parameter can only be "             \
-		       "`LIST_ALLOC` or `LIST_FREE` (0 and 1 "                 \
-		       "respectively); currently, it's %u\n",                  \
-		       _which)
+	rp_assertf_ex(_which == LIST_ALLOC || _which == LIST_FREE,             \
+		      _file,                                                   \
+		      _line,                                                   \
+		      "The `which_list_e` parameter can only be "              \
+		      "`LIST_ALLOC` or `LIST_FREE` (0 and 1 "                  \
+		      "respectively); currently, it's %u\n",                   \
+		      _which)
 
 enum {
 	FLAGS_NONE	  = 0,
@@ -241,7 +244,8 @@ static void _mem_debugf_internal(const char *fmt, ...)
 {
 	va_list args;
 
-	assert(fmt);
+	if (!fmt)
+		abort();
 	va_start(args, fmt);
 	(void)fprintf(stdout, "MEM: ");
 	(void)vfprintf(stdout, fmt, args);
@@ -273,52 +277,6 @@ static void _mem_debugf_internal(const char *fmt, ...)
 #define mem_debugf_end(...) (void)0
 #endif /* #ifdef RP_MEMORY_LOG_END_ONLY #else */
 #endif /* #ifdef RP_MEMORY_LOG #else */
-
-#define mem_assertf_ex(_cond, _file, _line, ...)                               \
-	_mem_assertf_internal(!!(_cond), #_cond, _file, _line, __VA_ARGS__)
-#define mem_assertf(_cond, ...)                                                \
-	_mem_assertf_internal(!!(_cond),                                       \
-			      #_cond,                                          \
-			      __FILE__,                                        \
-			      __LINE__,                                        \
-			      __VA_ARGS__)
-
-/*
- * Effectively an assert wrapper that allows for a format string.
- */
-static void _mem_assertf_internal(const bool_t cond,
-				  const char  *cond_str,
-				  const char  *file,
-				  const int    line,
-				  const char  *fmt,
-				  ...)
-{
-#ifdef RP_MEMORY_LOG
-	va_list args;
-
-	if (cond)
-		return;
-
-	assert(cond_str);
-	assert(fmt);
-	va_start(args, fmt);
-	(void)fprintf(stderr,
-		      "MEM: ASSERTION (%s) AT %s:%d FAILED: ",
-		      cond_str,
-		      file,
-		      line);
-	(void)vfprintf(stderr, fmt, args);
-	(void)fprintf(stderr, "\n");
-	va_end(args);
-	abort();
-#else  /* #ifdef RP_MEMORY_LOG */
-	(void)cond;
-	(void)cond_str;
-	(void)file;
-	(void)line;
-	(void)fmt;
-#endif /* #ifdef RP_MEMORY_LOG #else */
-}
 
 /*
  * Verifies that the state of a memory block pointer is valid.
@@ -354,15 +312,15 @@ static void _mem_block_verify(const struct block *b,
 	arr = is_alloc ? memory.alloc_arr : memory.free_arr;
 	cnt = is_alloc ? memory.alloc_cnt : memory.free_cnt;
 
-	mem_assertf_ex(b, file, line, "Block passed in is NULL");
+	rp_assertf_ex(b, file, line, "Block passed in is NULL");
 	ind = (size_t)(b - arr);
-	mem_assertf_ex(ind < cnt,
-		       file,
-		       line,
-		       "Index %lu is out of range of %s list! (Max is %lu)",
-		       ind,
-		       is_alloc ? "ALLOC" : "FREE",
-		       cnt);
+	rp_assertf_ex(ind < cnt,
+		      file,
+		      line,
+		      "Index %lu is out of range of %s list! (Max is %lu)",
+		      ind,
+		      is_alloc ? "ALLOC" : "FREE",
+		      cnt);
 
 #ifdef RP_MEMORY_LOG_VERBOSE
 	mem_debugf("Verifying memory slot %lu\n", ind);
@@ -370,52 +328,52 @@ static void _mem_block_verify(const struct block *b,
 
 	/* If our pointer is NULL, the rest of our data better match! */
 	if (!b->ptr) {
-		mem_assertf_ex(!b->sz,
-			       file,
-			       line,
-			       "Block <%p>'s pointer is NULL, "
-			       "but size is greater than 0",
-			       b);
-		mem_assertf_ex(!b->file,
-			       file,
-			       line,
-			       "Block <%p>'s pointer is NULL, "
-			       "but file string is non-NULL",
-			       b);
-		mem_assertf_ex(b->line == UINT32_MAX,
-			       file,
-			       line,
-			       "Block <%p>'s pointer is NULL, but "
-			       "file's line number is not UINT32_MAX (%u)",
-			       b,
-			       UINT32_MAX);
+		rp_assertf_ex(!b->sz,
+			      file,
+			      line,
+			      "Block <%p>'s pointer is NULL, "
+			      "but size is greater than 0",
+			      b);
+		rp_assertf_ex(!b->file,
+			      file,
+			      line,
+			      "Block <%p>'s pointer is NULL, "
+			      "but file string is non-NULL",
+			      b);
+		rp_assertf_ex(b->line == UINT32_MAX,
+			      file,
+			      line,
+			      "Block <%p>'s pointer is NULL, but "
+			      "file's line number is not UINT32_MAX (%u)",
+			      b,
+			      UINT32_MAX);
 
 		return;
 	}
 
 	/* Same for if it's non-NULL, just in the other direction. */
-	mem_assertf_ex(b->sz,
-		       file,
-		       line,
-		       "Block <%p>'s pointer <%p> "
-		       "is non-NULL, but size is 0",
-		       b,
-		       b->ptr);
-	mem_assertf_ex(b->file,
-		       file,
-		       line,
-		       "Block <%p>'s pointer <%p> is "
-		       "non-NULL, but file string is NULL",
-		       b,
-		       b->ptr);
-	mem_assertf_ex(b->line != UINT32_MAX,
-		       file,
-		       line,
-		       "Block <%p>'s pointer <%p> is non-NULL, "
-		       "but file's line number is UINT32_MAX (%u)",
-		       b,
-		       b->ptr,
-		       UINT32_MAX);
+	rp_assertf_ex(b->sz,
+		      file,
+		      line,
+		      "Block <%p>'s pointer <%p> "
+		      "is non-NULL, but size is 0",
+		      b,
+		      b->ptr);
+	rp_assertf_ex(b->file,
+		      file,
+		      line,
+		      "Block <%p>'s pointer <%p> is "
+		      "non-NULL, but file string is NULL",
+		      b,
+		      b->ptr);
+	rp_assertf_ex(b->line != UINT32_MAX,
+		      file,
+		      line,
+		      "Block <%p>'s pointer <%p> is non-NULL, "
+		      "but file's line number is UINT32_MAX (%u)",
+		      b,
+		      b->ptr,
+		      UINT32_MAX);
 }
 
 /*
@@ -435,13 +393,13 @@ static struct block *_mem_block_get(const size_t       i,
 	_ASSERT_WHICH_IS_VALID(which, file, line);
 	cnt = (which == LIST_ALLOC) ? memory.alloc_cnt : memory.free_cnt;
 
-	mem_assertf_ex(i < cnt,
-		       file,
-		       line,
-		       "Block index %lu from %s list is invalid! (Max is %lu)",
-		       i,
-		       (which == LIST_ALLOC) ? "ALLOC" : "FREE",
-		       cnt);
+	rp_assertf_ex(i < cnt,
+		      file,
+		      line,
+		      "Block index %lu from %s list is invalid! (Max is %lu)",
+		      i,
+		      (which == LIST_ALLOC) ? "ALLOC" : "FREE",
+		      cnt);
 
 #ifdef RP_MEMORY_LOG_VERBOSE
 	mem_debugf("Got block at index %lu @ %s:%d\n", i, file, line);
@@ -462,7 +420,7 @@ static struct block *_mem_block_get(const size_t       i,
  * Gets a memory block from the allocator's array using- not an index- but
  * the pointer that was allocated TO the block's pointer.
  *
- * This is really only used internally for `mem_free()`, since
+ * This is really only used internally for `rp_mem_free()`, since
  * you pass in the user-allocated pointer, but you also need
  * to clear out the block that pointer is associated with.
  */
@@ -503,17 +461,17 @@ static void _mem_block_set_empty(struct block *b, const which_list_e w)
 	cnt  = is_alloc ? memory.alloc_cnt : memory.free_cnt;
 	wstr = is_alloc ? "ALLOC" : "FREE";
 
-	mem_assertf(cnt, "Memory %s count is 0", wstr);
-	mem_assertf(arr, "Memory %s array is NULL", wstr);
+	rp_assertf(cnt, "Memory %s count is 0", wstr);
+	rp_assertf(arr, "Memory %s array is NULL", wstr);
 
-	mem_assertf(b, "Block pointer in %s list is NULL", wstr);
-	mem_assertf((size_t)(b - arr) < cnt,
-		    "Block pointer <%p> is out of range of memory block "
-		    "array for %s; (is %lu, should be less than %lu)",
-		    b,
-		    wstr,
-		    (size_t)(b - arr),
-		    cnt);
+	rp_assertf(b, "Block pointer in %s list is NULL", wstr);
+	rp_assertf((size_t)(b - arr) < cnt,
+		   "Block pointer <%p> is out of range of memory block "
+		   "array for %s; (is %lu, should be less than %lu)",
+		   b,
+		   wstr,
+		   (size_t)(b - arr),
+		   cnt);
 
 	b->ptr	= NULL;
 	b->sz	= 0ul;
@@ -534,30 +492,35 @@ static void _array_resize(void	     **arr_ptr,
 	size_t psz, nsz;
 	void  *arr = NULL;
 
-	assert(arr_ptr);
+	rp_assertf(arr_ptr, "Array pointer is NULL");
 	arr = *arr_ptr;
 
-	assert(elem_size);
+	rp_assertf(elem_size, "Array element size cannot be 0");
 
 	psz = elem_cnt_old * elem_size;
 	nsz = elem_cnt_new * elem_size;
 
-	assert(psz != nsz);
+	rp_assertf(psz != nsz, "Array's previous and next size are identical");
 
 	if (!psz && nsz) { /* Allocate a fresh array */
-		assert(!arr);
+		rp_assertf(!arr,
+			   "Trying to allocate a new array, "
+			   "but one already exists");
 		arr = malloc(nsz);
-		assert(arr);
+		rp_assertf(arr, "Failed to allocate new array");
 	} else if (psz && nsz) { /* Reallocate the existing array */
-		assert(arr);
+		rp_assertf(arr,
+			   "Trying to reallocate an existing array, "
+			   "but the original pointer is NULL");
 		arr = realloc(arr, nsz);
-		assert(arr);
+		rp_assertf(arr, "Failed to reallocate array.");
 	} else if (psz && !nsz) { /* Free the now-empty array */
-		assert(arr);
+		rp_assertf(arr, "Trying to free array that never existed");
 		free(arr);
 		arr = NULL;
+		rp_assertf(!arr, "Dude, what the ACTUAL FUCK did you do?!");
 	} else {
-		assert(0 && "INVALID ARRAY CONFIGURATION!");
+		rp_assertf(0, "INVALID ARRAY CONFIGURATION!");
 	}
 
 	*arr_ptr = arr;
@@ -629,17 +592,17 @@ _mem_move_block_to_free_list(struct block *b, const char *file, const int line)
 {
 	const size_t aind = (size_t)(b - memory.alloc_arr);
 
-	mem_assertf_ex(b,
-		       file,
-		       line,
-		       "Trying to move a NULL pointer to the free list");
-	mem_assertf_ex(aind < memory.alloc_cnt,
-		       file,
-		       line,
-		       "Trying to move block <%p> from alloc "
-		       "array to free array, but it was never "
-		       "in the alloc array to begin with!",
-		       b->ptr);
+	rp_assertf_ex(b,
+		      file,
+		      line,
+		      "Trying to move a NULL pointer to the free list");
+	rp_assertf_ex(aind < memory.alloc_cnt,
+		      file,
+		      line,
+		      "Trying to move block <%p> from alloc "
+		      "array to free array, but it was never "
+		      "in the alloc array to begin with!",
+		      b->ptr);
 
 	/* Just fucken' paranoid, honestly... */
 	_mem_block_verify(b, LIST_ALLOC, file, line);
@@ -688,15 +651,21 @@ static void _mem_atexit(void)
 
 	/* If we never called `malloc()` in our program, we're good to exit. */
 	if (!(flags & FLAG_IS_INIT)) {
-		assert(!memory.alloc_arr);
-		assert(!memory.alloc_cnt);
+		rp_assertf(!memory.alloc_arr,
+			   "Init flag is off, but "
+			   "array somehow exists");
+		rp_assertf(!memory.alloc_cnt,
+			   "Init flag is off, but "
+			   "array somehow has size");
 		mem_debugf_end("No memory was allocated in this "
 			       "program; nothing to report.\n");
 		goto finish_terminate_no_free;
 	}
 
 	if (!memory.alloc_cnt) {
-		assert(!memory.alloc_arr);
+		rp_assertf(!memory.alloc_arr,
+			   "Array size is 0, but "
+			   "array pointer is non-NULL");
 		mem_debugf_end("\n");
 		mem_debugf_end("NO BLOCKS LEFT ACTIVE AT EXIT; GOOD JOB!\n");
 		goto finish_terminate_free_free;
@@ -712,15 +681,15 @@ static void _mem_atexit(void)
 						 LIST_ALLOC,
 						 __FILE__,
 						 __LINE__);
-		mem_assertf(s,
-			    "Failed to get active memory block in "
-			    "terminate function at index %lu\n",
-			    i);
-		mem_assertf(s->ptr,
-			    "Block [p:<%p> i:%lu is in active "
-			    "list, but its pointer is NULL.",
-			    s,
-			    i);
+		rp_assertf(s,
+			   "Failed to get active memory block in "
+			   "terminate function at index %lu\n",
+			   i);
+		rp_assertf(s->ptr,
+			   "Block [p:<%p> i:%lu is in active "
+			   "list, but its pointer is NULL.",
+			   s,
+			   i);
 
 		mem_debugf_end("\tLEAK %lu: [p:<%p> sz:%lu] %s:%u\n",
 			       i,
@@ -751,16 +720,21 @@ finish_terminate_no_free:
  * This simply enables `FLAG_IS_INIT` in `flags`,
  * as that's all it really needs to do for now.
  *
- * This function is only called internally by `mem_alloc()` in order to
+ * This function is only called internally by `rp_mem_alloc()` in order to
  * ensure that it's set up and the rest of the internal's recognize that.
  */
 static void _mem_init(void)
 {
-	assert(!memory.alloc_cnt);
-	assert(!memory.alloc_arr);
-	assert(!memory.free_cnt);
-	assert(!memory.free_arr);
-	assert(!(flags & FLAG_IS_INIT)); /* Make sure we didn't already */
+	rp_assertf(!(flags & FLAG_IS_INIT),
+		   "Somehow `_mem_init()` was already called");
+	rp_assertf(!memory.alloc_cnt,
+		   "Trying to init, but array already has size");
+	rp_assertf(!memory.alloc_arr,
+		   "Trying to init, but array was already allocated");
+	rp_assertf(!memory.free_cnt,
+		   "Trying to init, but free list already has size");
+	rp_assertf(!memory.free_arr,
+		   "Trying to init, but free list was already allocated");
 	flags |= FLAG_IS_INIT;
 	mem_debugf("INITIALIZED SUCCESSFULLY!\n");
 }
@@ -772,13 +746,13 @@ static void _mem_init(void)
 /*
  * Internal function for `mem_register_exit_callback()`.
  */
-void _mem_register_exit_callback_internal(const char *file, const int line)
+void _rp_mem_register_exit_callback_internal(const char *file, const int line)
 {
-	mem_assertf(!(flags & FLAG_IS_INIT),
-		    "Somehow, first allocation has already "
-		    "been made before registering the callback.");
-	mem_assertf(!(flags & FLAG_HAS_CALLBACK),
-		    "Callback was already registered");
+	rp_assertf(!(flags & FLAG_IS_INIT),
+		   "Somehow, first allocation has already "
+		   "been made before registering the callback.");
+	rp_assertf(!(flags & FLAG_HAS_CALLBACK),
+		   "Callback was already registered");
 
 #ifndef RP_MEMORY_LOG
 	(void)file;
@@ -791,23 +765,23 @@ void _mem_register_exit_callback_internal(const char *file, const int line)
 	flags |= FLAG_HAS_CALLBACK;
 }
 
-void *_mem_alloc_internal(const size_t sz, const char *file, const int line)
+void *_rp_mem_alloc_internal(const size_t sz, const char *file, const int line)
 {
 	struct block *s = NULL, *t = NULL;
 	void	     *p = NULL;
 
 	/* If we didn't register a callback, don't go further. */
-	mem_assertf_ex(flags & FLAG_HAS_CALLBACK,
-		       file,
-		       line,
-		       "User hasn't called `mem_register_exit_"
-		       "callback()` before calling `mem_alloc()`.");
+	rp_assertf_ex(flags & FLAG_HAS_CALLBACK,
+		      file,
+		      line,
+		      "User hasn't called `mem_register_exit_"
+		      "callback()` before calling `rp_mem_alloc()`.");
 
-	/* First call of `mem_alloc()`. */
+	/* First call of `rp_mem_alloc()`. */
 	if (!(flags & FLAG_IS_INIT))
 		_mem_init();
 
-	mem_assertf_ex(sz, file, line, "Trying to allocate 0 bytes!");
+	rp_assertf_ex(sz, file, line, "Trying to allocate 0 bytes!");
 
 	/* Grow the array from the allocation */
 	_array_resize((void **)&memory.alloc_arr,
@@ -821,6 +795,7 @@ void *_mem_alloc_internal(const size_t sz, const char *file, const int line)
 	_mem_block_verify(s, LIST_ALLOC, file, line);
 
 	p = malloc(sz);
+	rp_assertf(p, "Failed to allocate pointer of size %lu", sz);
 
 	/*
 	 * When allocating a new pointer, check to see if the
@@ -839,29 +814,28 @@ void *_mem_alloc_internal(const size_t sz, const char *file, const int line)
 	}
 
 	/* Set it up with the allocation data */
-	assert(p);
 	s->ptr	= p;
 	s->sz	= sz;
 	s->file = file;
 	s->line = (u32)line;
 	_mem_block_verify(s, LIST_ALLOC, file, line);
 
-	mem_debugf("mem_alloc(%lu) -> <%p> %s:%d\n", sz, p, file, line);
+	mem_debugf("rp_mem_alloc(%lu) -> <%p> %s:%d\n", sz, p, file, line);
 
 	/* Send the user pointer on it's way to the caller. */
 	return p;
 }
 
-void _mem_free_internal(void *ptr, const char *file, const int line)
+void _rp_mem_free_internal(void *ptr, const char *file, const int line)
 {
 	struct block *s;
 
-	mem_assertf_ex(flags & FLAG_IS_INIT,
-		       file,
-		       line,
-		       "No allocation was previously made, "
-		       "so there's nothing to free.");
-	mem_assertf_ex(ptr, file, line, "Trying to free a NULL pointer");
+	rp_assertf_ex(flags & FLAG_IS_INIT,
+		      file,
+		      line,
+		      "No allocation was previously made, "
+		      "so there's nothing to free.");
+	rp_assertf_ex(ptr, file, line, "Trying to free a NULL pointer");
 
 	/*
 	 * Make sure that it's not in the free list.
@@ -878,12 +852,12 @@ void _mem_free_internal(void *ptr, const char *file, const int line)
 	}
 
 	s = _mem_get_block_from_user_ptr(ptr, LIST_ALLOC, file, line);
-	mem_assertf(s,
-		    file,
-		    line,
-		    "Failed to get allocated block from user pointer <%p>",
-		    ptr);
-	mem_debugf("mem_free(<%p>) [sz:%lu] %s:%d\n",
+	rp_assertf(s,
+		   file,
+		   line,
+		   "Failed to get allocated block from user pointer <%p>",
+		   ptr);
+	mem_debugf("rp_mem_free(<%p>) [sz:%lu] %s:%d\n",
 		   s->ptr,
 		   s->sz,
 		   file,
@@ -892,6 +866,8 @@ void _mem_free_internal(void *ptr, const char *file, const int line)
 }
 
 #ifdef RP_MEMORY_TEST
+#include "rp_random.h"
+
 static void rp_memory_test(void)
 {
 #ifdef malloc
@@ -902,15 +878,15 @@ static void rp_memory_test(void)
 #error "MEM_TEST: `free` as a macro was already defined elsewhere"
 #endif /* #ifdef free */
 
-#define malloc(_sz) _mem_alloc_internal(_sz, __FILE__, __LINE__)
-#define free(_sz)   _mem_free_internal(_sz, __FILE__, __LINE__)
+#define malloc(_sz) _rp_mem_alloc_internal(_sz, __FILE__, __LINE__)
+#define free(_sz)   _rp_mem_free_internal(_sz, __FILE__, __LINE__)
 
 	static u32 *ptr_test[RP_MEMORY_TEST_ALLOC_CNT] = { NULL };
 	size_t	    i;
 
 	fprintf(stdout, "\n[TEST] rp_memory.h:\n\n");
 
-	_mem_register_exit_callback_internal(__FILE__, __LINE__);
+	_rp_mem_register_exit_callback_internal(__FILE__, __LINE__);
 
 	rp_random_seed(UINT32_MAX);
 
@@ -924,7 +900,11 @@ static void rp_memory_test(void)
 		} while (!num);
 
 		ptr_test[i] = (u32 *)malloc(sizeof(**ptr_test) * num);
-		assert(ptr_test[i]);
+		rp_assertf(ptr_test[i],
+			   "Failed to allocate pointer "
+			   "test index %lu of size %lu",
+			   i,
+			   sizeof(**ptr_test) * num);
 
 		/* 2/3 of the time, just continue like normal */
 		if (rp_random_u32() % 3) {
@@ -974,14 +954,14 @@ static void rp_memory_test(void)
  * them prettier names and passing in the __FILE__ and __LINE__ they were
  * called from for glorious, glorious debugging purposes!
  */
-#define mem_register_exit_callback()                                           \
-	_mem_register_exit_callback_internal(__FILE__, __LINE__)
-#define mem_alloc(_sz) _mem_alloc_internal(_sz, __FILE__, __LINE__)
-#define mem_free(_ptr) _mem_free_internal(_ptr, __FILE__, __LINE__)
+#define rp_mem_register_exit_callback()                                        \
+	_rp_mem_register_exit_callback_internal(__FILE__, __LINE__)
+#define rp_mem_alloc(_sz) _rp_mem_alloc_internal(_sz, __FILE__, __LINE__)
+#define rp_mem_free(_ptr) _rp_mem_free_internal(_ptr, __FILE__, __LINE__)
 
 #ifdef RP_MEMORY_WRAP_STDLIB
-#define malloc(_sz) mem_alloc(_sz)
-#define free(_sz)   mem_free(_sz)
+#define malloc(_sz) rp_mem_alloc(_sz)
+#define free(_sz)   rp_mem_free(_sz)
 #endif /* #ifdef RP_MEMORY_WRAP_STDLIB */
 
 #endif /* #ifndef _RP_MEMORY_H_ */

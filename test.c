@@ -1,5 +1,3 @@
-#include <assert.h>
-
 /* rp_random.h */
 #define RP_RANDOM_TEST
 #include "rp_random.h"

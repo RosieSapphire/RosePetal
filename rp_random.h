@@ -16,68 +16,6 @@
 
 RP_STATIC_ASSERT(RAND_MAX == INT32_MAX, RAND_MAX_must_equal_INT32_MAX);
 
-#ifdef assertf
-#error "The \"assertf\" macro is already defined elsewhere!"
-#endif /* #ifdef assertf */
-
-#ifdef RP_RANDOM_LOG
-#include <stdio.h>
-#include <stdarg.h>
-#include <string.h>
-#endif /* #ifdef RP_RANDOM_LOG */
-
-static __inline void _assertf_internal(const bool_t cond,
-				       const char  *cond_str,
-				       const char  *file,
-				       const int    line,
-				       const char  *func,
-				       const char  *fmt,
-				       ...)
-{
-#ifdef RP_RANDOM_LOG
-	va_list args;
-
-	if (cond)
-		return;
-
-	va_start(args, fmt);
-	fprintf(stderr,
-		"RANDOM: ASSERTION (%s) @ %s:%d in %s FAILED: ",
-		cond_str,
-		strrchr(file, '/') ? strrchr(file, '/') + 1 : file,
-		line,
-		func);
-	vfprintf(stderr, fmt, args);
-	fprintf(stderr, "\n");
-	va_end(args);
-	abort();
-#else  /* #ifdef RP_RANDOM_LOG */
-	(void)cond;
-	(void)cond_str;
-	(void)file;
-	(void)line;
-	(void)func;
-	(void)fmt;
-#endif /* #ifdef RP_RANDOM_LOG #else */
-}
-
-#ifdef RP_RANDOM_LOG
-#define assertf(_cond, _fmt, ...)                                              \
-	_assertf_internal(_cond,                                               \
-			  #_cond,                                              \
-			  __FILE__,                                            \
-			  __LINE__,                                            \
-			  __func__,                                            \
-			  _fmt,                                                \
-			  __VA_ARGS__)
-#else /* #ifdef RP_RANDOM_LOG */
-#define assertf(_cond, _fmt, ...)                                              \
-	do {                                                                   \
-		(void)(_cond);                                                 \
-		(void)(_fmt);                                                  \
-	} while (0)
-#endif /* #ifdef RP_RANDOM_LOG #else */
-
 /*
  * You can seed the randomness with a custom value, or
  * just pass `UINT32_MAX` for it to use `time(NULL)`, which will
@@ -114,11 +52,11 @@ static __inline u32 rp_random_u32(void)
  */
 static __inline u32 rp_random_u32_range(const u32 lo, const u32 hi)
 {
-	assertf(hi > lo,
-		"rp_random_u32_range(): High must be "
-		"greater than low [.lo = %u, .hi = %u]",
-		lo,
-		hi);
+	rp_assertf(hi > lo,
+		   "rp_random_u32_range(): High must be "
+		   "greater than low [.lo = %u, .hi = %u]",
+		   lo,
+		   hi);
 	return (rp_random_u32() % (hi - lo)) + lo;
 }
 
@@ -140,18 +78,18 @@ static __inline s32 rp_random_s32_range(const s32 lo, const s32 hi)
 {
 	s64 t;
 
-	assertf(hi > lo,
-		"rp_random_s32_range(): High must be "
-		"greater than low [.lo = %u, .hi = %u]",
-		lo,
-		hi);
+	rp_assertf(hi > lo,
+		   "rp_random_s32_range(): High must be "
+		   "greater than low [.lo = %u, .hi = %u]",
+		   lo,
+		   hi);
 
 	t = (s64)(rp_random_u32() % (u64)((s64)hi - (s64)lo)) + (s64)lo;
 
-	assertf(t == (s32)t,
-		"Conversion error when down-casting `t` from %lu to %d",
-		t,
-		(s32)t);
+	rp_assertf(t == (s32)t,
+		   "Conversion error when down-casting `t` from %lu to %d",
+		   t,
+		   (s32)t);
 
 	return (s32)t;
 }

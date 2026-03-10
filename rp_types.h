@@ -1,7 +1,7 @@
 #ifndef _RP_TYPES_H_
 #define _RP_TYPES_H_
 
-#include "rp_static_assert.h"
+#include "rp_assert.h"
 
 typedef unsigned char u8;
 typedef signed char   s8;
