@@ -1,10 +1,11 @@
 DEBUG ?= 1
 
-RANDOM_LOG ?=
+RP_RANDOM_LOG  ?=
+RP_RANDOM_TEST ?= 1
 
-MEM_LOG          ?= 1
-MEM_LOG_END_ONLY ?=
-MEM_LOG_VERBOSE  ?=
+RP_MEM_LOG          ?= 1
+RP_MEM_LOG_END_ONLY ?=
+RP_MEM_LOG_VERBOSE  ?=
 
 # Library
 LIB_NAME := memory_allocator
@@ -15,9 +16,6 @@ PROG_NAME := test
 PROG_ELF  := $(PROG_NAME).elf
 TEST_C    := $(PROG_NAME).c
 TEST_O    := $(TEST_C:%.c=%.o)
-
-# Helper
-BUILD_FILES := $(PROG_ELF) $(TEST_O) $(LIB_O) *.json .cache/
 
 WARN_IGNORE := -Wno-format-nonliteral -Wno-reserved-macro-identifier \
 	       -Wno-reserved-identifier -Wno-variadic-macros \
@@ -32,17 +30,21 @@ else
 	CFLAGS += -O3 -g0 -DNDEBUG
 endif
 
-ifdef RANDOM_LOG
-	CFLAGS += -DRANDOM_DEBUG
+ifdef RP_RANDOM_LOG
+	CFLAGS += -DRP_RANDOM_LOG
 endif
 
-ifdef MEM_LOG
+ifdef RP_RANDOM_TEST
+	CFLAGS += -DRP_RANDOM_TEST
+endif
+
+ifdef RP_MEM_LOG
 	CFLAGS += -DALLOCATOR_LOG
-	ifdef MEM_LOG_VERBOSE
+	ifdef RP_MEM_LOG_VERBOSE
 		CFLAGS += -DALLOCATOR_LOG_VERBOSE
 	endif
 else
-	ifdef MEM_LOG_END_ONLY
+	ifdef RP_MEM_LOG_END_ONLY
 		CFLAGS += -DALLOCATOR_LOG_END_ONLY
 	endif
 endif
@@ -50,7 +52,7 @@ endif
 
 all: $(PROG_ELF)
 
-$(PROG_ELF): $(LIB_O) $(TEST_O)
+$(PROG_ELF): $(TEST_O)
 	@echo "    [LD] $@"
 	@$(CC) $(CFLAGS) -o $@ $^
 
@@ -60,4 +62,4 @@ $(TEST_O): $(TEST_C)
 
 clean:
 	@echo "Cleaning previous build..."
-	@rm -rf $(BUILD_FILES)
+	@rm -rf *.elf *.o *.json .cache/

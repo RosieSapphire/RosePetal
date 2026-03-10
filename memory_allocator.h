@@ -56,7 +56,7 @@ extern void _mem_free_internal(void *ptr, const char *file, const int line);
 #include <stdarg.h>
 #include <string.h>
 
-#include "types.h"
+#include "rp_types.h"
 
 /******************************************************************************
  * TODO:                                                                      *

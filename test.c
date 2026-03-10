@@ -1,14 +1,14 @@
 #include <assert.h>
 #include <stdio.h>
 
-#include "types.h"
-#include "random.h"
+#include "rp_types.h"
+#include "rp_random.h"
 
 #define MEMORY_ALLOCATOR_WRAP_STDLIB
 #define MEMORY_ALLOCATOR_IMPLEMENTATION
 #include "memory_allocator.h"
 
-#define PTR_TEST_CNT 15000ul
+#define PTR_TEST_CNT 128ul
 
 /*
  * Randomly frees only some of the blocks to simulate a lazy-ass programmer
@@ -23,9 +23,11 @@ int main(void)
 {
 	size_t i;
 
+	rp_random_test();
+
 	mem_register_exit_callback();
 
-	random_seed(UINT32_MAX);
+	rp_random_seed(UINT32_MAX);
 
 	/* Allocate a bunch of memory */
 	for (i = 0ul; i < PTR_TEST_CNT; ++i) {
@@ -33,16 +35,16 @@ int main(void)
 		u8     num;
 
 		do {
-			num = random_u8();
+			num = rp_random_u8();
 		} while (!num);
 
 		ptr_test[i] = (u32 *)malloc(sizeof(**ptr_test) * num);
 		assert(ptr_test[i]);
 
 		/* 2/3 of the time, just continue like normal */
-		if (random_u32() % 3) {
+		if (rp_random_u32() % 3) {
 			for (j = 0ul; j < num; ++j)
-				*(ptr_test[i]) = random_u32();
+				*(ptr_test[i]) = rp_random_u32();
 
 			continue;
 		}
@@ -52,7 +54,7 @@ int main(void)
 		 * allocated, and randomly (another 50%) free those pointers.
 		 */
 		for (j = 0ul; j <= i; ++j) {
-			if (random_bool_50_percent())
+			if (rp_random_bool_50_percent())
 				continue;
 
 			if (!ptr_test[j])

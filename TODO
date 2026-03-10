@@ -1,0 +1,3 @@
+- Rename `rp_static_assert.h` to `rp_assert.h` and add the other assert functions, as well as possibly some `debugf` stuff.
+- Refactor the `test.c` into a function `rp_mem_test()`, similar to what I did with `rp_random_test()`, and have a macro for defining it!
+- Refactor `rp_random.h` so that it follows the IMPLEMENTATION pattern.
