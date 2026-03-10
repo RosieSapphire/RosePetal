@@ -5,15 +5,17 @@
 #include "random.h"
 
 #define MEMORY_ALLOCATOR_WRAP_STDLIB
+#if 0
 #define MEMORY_ALLOCATOR_IMPLEMENTATION
+#endif
 #include "memory_allocator.h"
 
-#define PTR_TEST_CNT 50ul
+#define PTR_TEST_CNT 15000ul
 
 /*
  * Randomly frees only some of the blocks to simulate a lazy-ass programmer
  */
-#if 1
+#if 0
 #define SIMULATE_LEAK
 #endif
 

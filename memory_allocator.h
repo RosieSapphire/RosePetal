@@ -48,6 +48,9 @@ _mem_alloc_internal(const size_t sz, const char *file, const int line);
  */
 extern void _mem_free_internal(void *ptr, const char *file, const int line);
 
+#if 1
+#define MEMORY_ALLOCATOR_IMPLEMENTATION
+#endif
 #ifdef MEMORY_ALLOCATOR_IMPLEMENTATION
 #include <assert.h>
 #include <stdio.h>
@@ -105,22 +108,49 @@ static internal_flags_e flags = FLAGS_NONE;
  *********************/
 
 /*
- * Prints a formatted message to STDERR only if `ALLOCATOR_LOG` is defined.
+ * Prints a formatted message to STDOUT only if `ALLOCATOR_LOG` is defined.
  */
-static void mem_debugf(const char *fmt, ...)
+#if defined(ALLOCATOR_LOG) ||                                                  \
+		(!defined(ALLOCATOR_LOG) && defined(ALLOCATOR_LOG_END_ONLY))
+static void
+_mem_debugf_internal(const char *fmt, ...)
 {
-#ifdef ALLOCATOR_LOG
 	va_list args;
 
 	assert(fmt);
 	va_start(args, fmt);
-	(void)fprintf(stderr, "MEM: ");
-	(void)vfprintf(stderr, fmt, args);
+	(void)fprintf(stdout, "MEM: ");
+	(void)vfprintf(stdout, fmt, args);
 	va_end(args);
-#else  /* #ifdef ALLOCATOR_LOG */
-	(void)fmt;
-#endif /* #ifdef ALLOCATOR_LOG #else */
 }
+#endif /* #if defined(ALLOCATOR_LOG) ||                                        \
+	      (!defined(ALLOCATOR_LOG) &&                                      \
+	       defined(ALLOCATOR_LOG_END_ONLY)) */
+
+#ifdef ALLOCATOR_LOG
+#define mem_debugf(...) _mem_debugf_internal(__VA_ARGS__)
+#else /* #ifdef ALLOCATOR_LOG */
+#define mem_debugf(...) (void)0
+#endif /* #ifdef ALLOCATOR_LOG #else */
+
+/*
+ * Stupid fucking hack for making it so that,
+ * depending on the compilation flags, it will
+ * only print the message at the end instead of
+ * logging every single allocation made since
+ * the beginning of the program.
+ */
+#ifdef ALLOCATOR_LOG
+#define mem_debugf_end(...)                                                    \
+	_mem_debugf_internal(__VA_ARGS__)
+#else /* #ifdef ALLOCATOR_LOG */
+#ifdef ALLOCATOR_LOG_END_ONLY
+#define mem_debugf_end(...)                                                    \
+	_mem_debugf_internal(__VA_ARGS__)
+#else /* #ifdef ALLOCATOR_LOG_END_ONLY */
+#define mem_debugf_end(...) (void)0
+#endif /* #ifdef ALLOCATOR_LOG_END_ONLY #else */
+#endif /* #ifdef ALLOCATOR_LOG #else */
 
 #define mem_assertf_ex(_cond, _file, _line, _fmt, ...)                         \
 	_mem_assertf_internal(!!(_cond),                                       \
@@ -415,17 +445,32 @@ static size_t _array_remove(void       **arr_ptr,
 			    const size_t elem_size,
 			    const size_t elem_cnt)
 {
+#if 0
 	size_t i;
+#endif
 
 	/*
 	 * TODO:
-	 * Possible optimization: If order doesn't matter, (which
-	 * in the case of memblocks, it doesn't), it may be possible
-	 * to just memcpy the highest position element directly to
-	 * the one we want to remove and then realloc the array,
-	 * making it so there isn't a shitload of memcpy's.
+	 * The plan eventually is that this will be in it's own
+	 * rp_array.h module, so it may be worth the investment
+	 * to have two different versions of this function.
+	 * One that does the original method of bucket-brigading
+	 * the data downward if the order is important, and the
+	 * one being used specifically for this purpose where
+	 * the order of the elements doesn't matter, just as
+	 * long as it can resize the array with one less element.
 	 */
 
+	/*
+	 * Measurements are from 15000 element test, 5 run average.
+	 *
+	 * Old method: 1.1242 sec
+	 * New method: 1.0746 sec
+	 *
+	 * Result: ~4% performance improvement
+	 */
+
+#if 0
 	/* Remove that slot from the alloc array and shift it all down */
 	for (i = ind; i < elem_cnt; ++i) {
 		/* If it's the last element in our array, we're good */
@@ -437,6 +482,12 @@ static size_t _array_remove(void       **arr_ptr,
 		       (u8 *)(*arr_ptr) + ((i + 1ul) * elem_size),
 		       elem_size);
 	}
+#else
+	/* Copy the last slot to the slot we wanna remove and then realloc. */
+	memcpy((u8 *)(*arr_ptr) + (ind * elem_size),
+	       (u8 *)(*arr_ptr) + ((elem_cnt * elem_size) - elem_size),
+	       elem_size);
+#endif
 
 	/* Then resize the array like nothing ever happened. :D */
 	_array_resize(arr_ptr, elem_size, elem_cnt, elem_cnt - 1ul);
@@ -510,21 +561,21 @@ static void _mem_atexit(void)
 	if (!(flags & FLAG_IS_INIT)) {
 		assert(!memory.alloc_arr);
 		assert(!memory.alloc_cnt);
-		mem_debugf("No memory was allocated in this "
-			   "program; nothing to report.\n");
+		mem_debugf_end("No memory was allocated in this "
+			       "program; nothing to report.\n");
 		goto finish_terminate_no_free;
 	}
 
 	if (!memory.alloc_cnt) {
 		assert(!memory.alloc_arr);
-		mem_debugf("\n");
-		mem_debugf("NO BLOCKS LEFT ACTIVE AT EXIT; GOOD JOB!\n");
+		mem_debugf_end("\n");
+		mem_debugf_end("NO BLOCKS LEFT ACTIVE AT EXIT; GOOD JOB!\n");
 		goto finish_terminate_free_free;
 	}
 
-	mem_debugf("\n");
-	mem_debugf("WARNING: %d BLOCKS STILL ACTIVE AT EXIT:\n",
-		   memory.alloc_cnt);
+	mem_debugf_end("\n");
+	mem_debugf_end("WARNING: %d BLOCKS STILL ACTIVE AT EXIT:\n",
+		       memory.alloc_cnt);
 
 	i = 0ul;
 	while (memory.alloc_cnt) {
@@ -542,12 +593,12 @@ static void _mem_atexit(void)
 			    s,
 			    i);
 
-		mem_debugf("\tLEAK %lu: [p:<%p> sz:%lu] %s:%u\n",
-			   i,
-			   s->ptr,
-			   s->sz,
-			   s->file,
-			   s->line);
+		mem_debugf_end("\tLEAK %lu: [p:<%p> sz:%lu] %s:%u\n",
+			       i,
+			       s->ptr,
+			       s->sz,
+			       s->file,
+			       s->line);
 		_mem_move_block_to_free_list(s, __FILE__, __LINE__);
 		++i;
 	}
@@ -564,7 +615,7 @@ finish_terminate_free_free:
 finish_terminate_no_free:
 	flags &= ~FLAG_IS_INIT;
 
-	mem_debugf("TERMINATED SUCCESSFULLY!\n");
+	mem_debugf_end("TERMINATED SUCCESSFULLY!\n");
 }
 
 /*
@@ -599,6 +650,11 @@ void _mem_register_exit_callback_internal(const char *file, const int line)
 		    "been made before registering the callback.");
 	mem_assertm(!(flags & FLAG_HAS_CALLBACK),
 		    "Callback was already registered");
+
+#ifndef ALLOCATOR_LOG
+	(void)file;
+	(void)line;
+#endif /* #ifndef ALLOCATOR_LOG */
 
 	mem_debugf("Registered exit callback at %s:%d\n", file, line);
 	atexit(_mem_atexit);
@@ -718,8 +774,8 @@ void _mem_free_internal(void *ptr, const char *file, const int line)
 #define mem_free(_ptr) _mem_free_internal(_ptr, __FILE__, __LINE__)
 
 #ifdef MEMORY_ALLOCATOR_WRAP_STDLIB
-#define malloc(_sz) _mem_alloc_internal(_sz, __FILE__, __LINE__)
-#define free(_sz)   _mem_free_internal(_sz, __FILE__, __LINE__)
+#define malloc(_sz) mem_alloc(_sz)
+#define free(_sz)   mem_free(_sz)
 #endif /* #ifdef MEMORY_ALLOCATOR_WRAP_STDLIB */
 
 #endif /* #ifndef _MEMORY_ALLOCATOR_H_ */
