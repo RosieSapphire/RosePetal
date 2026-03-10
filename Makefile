@@ -2,8 +2,8 @@ DEBUG ?= 1
 
 RANDOM_LOG ?=
 
-MEM_LOG          ?=
-MEM_LOG_END_ONLY ?= 1
+MEM_LOG          ?= 1
+MEM_LOG_END_ONLY ?=
 MEM_LOG_VERBOSE  ?=
 
 # Library
@@ -20,10 +20,10 @@ TEST_O    := $(TEST_C:%.c=%.o)
 BUILD_FILES := $(PROG_ELF) $(TEST_O) $(LIB_O) *.json .cache/
 
 WARN_IGNORE := -Wno-format-nonliteral -Wno-reserved-macro-identifier \
-	       -Wno-reserved-identifier -Wno-unsafe-buffer-usage \
-	       -Wno-variadic-macros -Wno-bad-function-cast
+	       -Wno-reserved-identifier -Wno-variadic-macros \
+	       -Wno-bad-function-cast -Wno-unsafe-buffer-usage
 
-CC     := clang
+CC     := clang-20
 CFLAGS := -Wall -Wextra -Weverything -Werror -pedantic -ansi $(WARN_IGNORE)
 
 ifdef DEBUG

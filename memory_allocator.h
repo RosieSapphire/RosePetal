@@ -48,9 +48,6 @@ _mem_alloc_internal(const size_t sz, const char *file, const int line);
  */
 extern void _mem_free_internal(void *ptr, const char *file, const int line);
 
-#if 1
-#define MEMORY_ALLOCATOR_IMPLEMENTATION
-#endif
 #ifdef MEMORY_ALLOCATOR_IMPLEMENTATION
 #include <assert.h>
 #include <stdio.h>
