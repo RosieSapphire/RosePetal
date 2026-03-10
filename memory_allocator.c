@@ -328,21 +328,6 @@ static void _mem_block_set_empty(struct block *b)
 }
 
 /*
- * Just gets the number of blocks in the array
- * that have active pointers attached to them.
- */
-static __inline size_t _mem_active_blocks_get_count(void)
-{
-	size_t i, cnt = 0ul;
-
-	for (i = 0ul; i < memory.alloc_cnt; ++i)
-		if (memory.alloc_arr[i].ptr)
-			++cnt;
-
-	return cnt;
-}
-
-/*
  * Conditionally call `malloc()` or `realloc()` depending on if the array
  * is NULL or not. Very handing for resizing arrays; will probably put
  * in some kind of util file once I get this more properly fleshed out.
@@ -480,7 +465,7 @@ _mem_move_block_to_free_list(struct block *b, const char *file, const int line)
  */
 static void _mem_atexit(void)
 {
-	size_t i, j, active_cnt = SIZE_MAX;
+	size_t i;
 
 	/* If we never called `malloc()` in our program, we're good to exit. */
 	if (!(flags & FLAG_IS_INIT)) {
@@ -488,48 +473,56 @@ static void _mem_atexit(void)
 		assert(!memory.alloc_cnt);
 		mem_debugf("No memory was allocated in this "
 			   "program; nothing to report.\n");
-		goto finish_terminate;
+		goto finish_terminate_no_free;
 	}
 
-	active_cnt = _mem_active_blocks_get_count();
-	if (!active_cnt) {
+	if (!memory.alloc_cnt) {
+		assert(!memory.alloc_arr);
 		mem_debugf("\n");
 		mem_debugf("NO BLOCKS LEFT ACTIVE AT EXIT; GOOD JOB!\n");
-		goto finish_terminate_free_internals;
+		goto finish_terminate_free_free;
 	}
 
 	mem_debugf("\n");
-	mem_debugf("WARNING: %d BLOCKS STILL ACTIVE AT EXIT:\n", active_cnt);
+	mem_debugf("WARNING: %d BLOCKS STILL ACTIVE AT EXIT:\n",
+		   memory.alloc_cnt);
 
-	j = 0ul;
-	for (i = 0ul; i < memory.alloc_cnt; ++i) {
-		struct block *s = _mem_block_get(i,
+	i = 0ul;
+	while (memory.alloc_cnt) {
+		struct block *s = _mem_block_get(0,
 						 LIST_ALLOC,
 						 __FILE__,
 						 __LINE__);
-
-		if (!s->ptr)
-			continue;
+		mem_assertf(s,
+			    "Failed to get active memory block in "
+			    "terminate function at index %lu\n",
+			    i);
+		mem_assertf(s->ptr,
+			    "Block [p:<%p> i:%lu is in active "
+			    "list, but its pointer is NULL.",
+			    s,
+			    i);
 
 		mem_debugf("\tLEAK %lu: [p:<%p> sz:%lu] %s:%u\n",
-			   j,
+			   i,
 			   s->ptr,
 			   s->sz,
 			   s->file,
 			   s->line);
 		_mem_move_block_to_free_list(s, __FILE__, __LINE__);
-		++j;
+		++i;
 	}
 
-finish_terminate_free_internals:
 	free(memory.alloc_arr);
 	memory.alloc_arr = NULL;
 	memory.alloc_cnt = 0ul;
+
+finish_terminate_free_free:
 	free(memory.free_arr);
 	memory.free_arr = NULL;
 	memory.free_cnt = 0ul;
 
-finish_terminate:
+finish_terminate_no_free:
 	flags &= ~FLAG_IS_INIT;
 
 	mem_debugf("TERMINATED SUCCESSFULLY!\n");
