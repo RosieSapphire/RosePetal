@@ -1,4 +1,12 @@
 /*
+ * TODO:
+ * Do something like `rp_mem_log_start()` and `rp_mem_log_end()` so that
+ * you can choose to log memory during a specific point. Make it so you
+ * don't have to sift through a bunch of output and can just get a specific
+ * segment of the program to get a better idea of what's going wrong when.
+ */
+
+/*
  * The memory allocator/debugger module for Rose Petal.
  * It keeps track of how much memory you currently have allocated,
  * how much you've freed, what blocks were left over in memory
