@@ -1,3 +1,5 @@
+# NOTE: This README.MD is copied from an older version of the repo and needs to be updated!
+
 # 🌹Rose Petal🌹
 Rose Petal is an API I am writing to serve as something of a base-layer for many programs I may write in the future. It consists of multiple different modules that get built into static libraries that are then linked with whatever program you want.
 

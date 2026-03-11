@@ -4,7 +4,7 @@ BasedOnStyle: LLVM
 # Indentation
 IndentWidth: 8
 TabWidth: 8
-UseTab: Never
+UseTab: Always
 ContinuationIndentWidth: 16
 
 # Braces
@@ -45,6 +45,7 @@ DerivePointerAlignment: false
 # Alignment
 AlignConsecutiveAssignments: true
 AlignConsecutiveDeclarations: true
+AlignConsecutiveMacros: true
 AlignTrailingComments: true
 AlignOperands: true
 AlignAfterOpenBracket: Align

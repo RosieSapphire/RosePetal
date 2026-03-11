@@ -1,38 +1,38 @@
-# Convinience for building and cleaning everything
-RP_DIR_MEMORY           := memory
-RP_FILE_MEMORY_A        := $(RP_DIR_MEMORY)/build/librp_memory.a
-RP_FILE_MEMORY_TEST_ELF := $(RP_DIR_MEMORY)/build/test.elf
+DEBUG ?= 1
 
-RP_DIR_WINDOW           := window
-RP_FILE_WINDOW_A        := $(RP_DIR_WINDOW)/build/librp_window.a
-RP_FILE_WINDOW_TEST_ELF := $(RP_DIR_WINDOW)/build/test.elf
+# Libraries
+RP_RANDOM_H := rp_random.h
+RP_MEMORY_H := rp_memory.h
 
-.PHONY: all all_test memory memory_test window window_test clean
+# Test
+PROG_NAME := test
+PROG_ELF  := $(PROG_NAME).elf
+TEST_C    := $(PROG_NAME).c
+TEST_O    := $(TEST_C:%.c=%.o)
 
-all: memory window
+WARN_IGNORE := -Wno-format-nonliteral -Wno-reserved-macro-identifier \
+	       -Wno-reserved-identifier -Wno-variadic-macros \
+	       -Wno-bad-function-cast -Wno-unsafe-buffer-usage
 
-all_test: memory_test window_test
+CC     := clang-20
+CFLAGS := -Wall -Wextra -Weverything -Werror -pedantic -ansi $(WARN_IGNORE)
 
-# Memory
-memory:
-	@echo "Building Memory Library..."
-	@make -j -C $(RP_DIR_MEMORY)
+ifdef DEBUG
+	CFLAGS += -O0 -ggdb3 -D_DEBUG
+else
+	CFLAGS += -O3 -g0 -DNDEBUG
+endif
 
-memory_test:
-	@echo "Building Memory Test..."
-	@make test -j -C $(RP_DIR_MEMORY)
+all: $(PROG_ELF)
 
-# Window
-window:
-	@echo "Building Window Library..."
-	@make -j -C $(RP_DIR_WINDOW)
+$(PROG_ELF): $(TEST_O) $(RP_MEMORY_H)
+	@echo "    [LD] $@"
+	@$(CC) $(CFLAGS) -o $@ $<
 
-window_test:
-	@echo "Building Window Test..."
-	@make test -j -C $(RP_DIR_WINDOW)
+$(TEST_O): $(TEST_C)
+	@echo "    [CC] $<"
+	@$(CC) $(CFLAGS) -o $@ -c $<
 
 clean:
-	@echo "Wiping Memory Submodule"
-	@make clean -C $(RP_DIR_MEMORY)
-	@echo "Wiping Window Submodule"
-	@make clean -C $(RP_DIR_WINDOW)
+	@echo "Cleaning previous build..."
+	@rm -rf *.elf *.o *.json .cache/

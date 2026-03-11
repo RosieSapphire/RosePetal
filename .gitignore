@@ -1,6 +1,8 @@
 # dirs
 .cache/
-build/
 
 # files
-compile_commands.json
+*.optimized
+*.elf
+*.o
+*.json
