@@ -101,6 +101,10 @@
 /*
  * Before doing anything, we must handle macro parity!
  */
+#if defined(RP_MEMORY_TEST) && !defined(RP_RANDOM_IMPLEMENTATION)
+#error "The `rp_memory_test()` function requires that `RP_RANDOM_IMPLEMENTATION` is defined, otherwise it can't use the random functions it requires."
+#endif /* #if defined(RP_MEMORY_TEST) && !defined(RP_RANDOM_IMPLEMENTATION) */
+
 #ifdef RP_MEMORY_LOG
 #ifdef RP_MEMORY_LOG_END_ONLY
 #error "You cannot define `RP_MEMORY_LOG_END_ONLY` if `RP_MEMORY_LOG` is already defined; pick one or the other."
@@ -152,7 +156,7 @@
  * which makes sure to clean up and memory left behind and notify
  * you about any pointers you forgot to free (ya greasy bastard).
  */
-extern void _rp_mem_register_exit_callback_internal(const char *file,
+extern void _rp_mem_exit_callback_register_internal(const char *file,
 						    const int	line);
 
 /*
@@ -746,7 +750,7 @@ static void _mem_init(void)
 /*
  * Internal function for `mem_register_exit_callback()`.
  */
-void _rp_mem_register_exit_callback_internal(const char *file, const int line)
+void _rp_mem_exit_callback_register_internal(const char *file, const int line)
 {
 	rp_assertf(!(flags & FLAG_IS_INIT),
 		   "Somehow, first allocation has already "
@@ -886,7 +890,7 @@ static void rp_memory_test(void)
 
 	fprintf(stdout, "\n[TEST] rp_memory.h:\n\n");
 
-	_rp_mem_register_exit_callback_internal(__FILE__, __LINE__);
+	_rp_mem_exit_callback_register_internal(__FILE__, __LINE__);
 
 	rp_random_seed(UINT32_MAX);
 
@@ -958,8 +962,8 @@ static void rp_memory_test(void)
  * them prettier names and passing in the __FILE__ and __LINE__ they were
  * called from for glorious, glorious debugging purposes!
  */
-#define rp_mem_register_exit_callback()                                        \
-	_rp_mem_register_exit_callback_internal(__FILE__, __LINE__)
+#define rp_mem_exit_callback_register()                                        \
+	_rp_mem_exit_callback_register_internal(__FILE__, __LINE__)
 #define rp_mem_alloc(_sz) _rp_mem_alloc_internal(_sz, __FILE__, __LINE__)
 #define rp_mem_free(_ptr) _rp_mem_free_internal(_ptr, __FILE__, __LINE__)
 
