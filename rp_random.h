@@ -144,14 +144,14 @@ extern f32 rp_random_f32_no(const f32 mag);
  * TODO:
  * Update this so it uses the centralized logging function instead of printf.
  */
-#ifdef debugf
-#error "`debugf()` is already defined elsewhere!"
-#endif /* #ifdef debugf */
+#ifdef rnd_debugf
+#error "`rnd_debugf()` is already defined elsewhere!"
+#endif /* #ifdef rnd_debugf */
 
 #ifdef RP_RANDOM_LOG
-#define debugf(...) printf(__VA_ARGS__)
+#define rnd_debugf(...) printf(__VA_ARGS__)
 #else /* #ifdef RP_RANDOM_LOG */
-#define debugf(...) ((void)0)
+#define rnd_debugf(...) ((void)0)
 #endif /* #ifdef RP_RANDOM_LOG #else */
 
 u32 rp_random_seed(const u32 seed)
@@ -159,7 +159,7 @@ u32 rp_random_seed(const u32 seed)
 	const u32 s = (seed == UINT32_MAX) ? (u32)time(NULL) : (u32)seed;
 
 	srand(s);
-	debugf("RNG: rp_random_seed(%u) -> %u\n", seed, s);
+	rnd_debugf("RNG: rp_random_seed(%u) -> %u\n", seed, s);
 
 	return s;
 }
@@ -169,7 +169,7 @@ u32 rp_random_u32(void)
 	const u32 r = (((u32)rand() & 0xFFFF) << 0u) |
 		      (((u32)rand() & 0xFFFF) << 16u);
 
-	debugf("rp_random_u32() -> %u\n", r);
+	rnd_debugf("rp_random_u32() -> %u\n", r);
 
 	return r;
 }
@@ -185,7 +185,7 @@ u32 rp_random_u32_range(const u32 lo, const u32 hi)
 		   hi);
 
 	r = (rp_random_u32() % (hi - lo)) + lo;
-	debugf("rp_random_u32_range(lo:%u, hi:%u) -> %u\n", lo, hi, r);
+	rnd_debugf("rp_random_u32_range(lo:%u, hi:%u) -> %u\n", lo, hi, r);
 
 	return r;
 }
@@ -194,7 +194,7 @@ s32 rp_random_s32(void)
 {
 	const s32 r = (s32)rp_random_u32();
 
-	debugf("rp_random_s32() -> %d\n", r);
+	rnd_debugf("rp_random_s32() -> %d\n", r);
 
 	return r;
 }
@@ -218,7 +218,7 @@ s32 rp_random_s32_range(const s32 lo, const s32 hi)
 		   (s32)t);
 
 	r = (s32)t;
-	debugf("rp_random_s32_range(lo:%d, hi:%d) -> %d\n", lo, hi, r);
+	rnd_debugf("rp_random_s32_range(lo:%d, hi:%d) -> %d\n", lo, hi, r);
 
 	return r;
 }
@@ -227,7 +227,7 @@ u16 rp_random_u16(void)
 {
 	const u16 r = (u16)(rp_random_u32() & 0xFFFF);
 
-	debugf("rp_random_u16() -> %u\n", r);
+	rnd_debugf("rp_random_u16() -> %u\n", r);
 
 	return r;
 }
@@ -236,7 +236,7 @@ s16 rp_random_s16(void)
 {
 	const s16 r = (s16)(rp_random_u32() & 0xFFFF);
 
-	debugf("rp_random_s16() -> %d\n", r);
+	rnd_debugf("rp_random_s16() -> %d\n", r);
 
 	return r;
 }
@@ -245,7 +245,7 @@ u8 rp_random_u8(void)
 {
 	const u8 r = (u8)(rp_random_u32() & 0xFF);
 
-	debugf("rp_random_u8() -> %u\n", r);
+	rnd_debugf("rp_random_u8() -> %u\n", r);
 
 	return r;
 }
@@ -254,7 +254,7 @@ s8 rp_random_s8(void)
 {
 	const s8 r = (s8)(rp_random_u32() & 0xFF);
 
-	debugf("rp_random_u8() -> %d\n", r);
+	rnd_debugf("rp_random_u8() -> %d\n", r);
 
 	return r;
 }
@@ -263,7 +263,7 @@ bool_t rp_random_bool_50_percent(void)
 {
 	const bool_t r = (bool_t)(rand() & 1);
 
-	debugf("rp_random_bool_50_percent() -> %5s\n", r ? "TRUE" : "FALSE");
+	rnd_debugf("rp_random_bool_50_percent() -> %5s\n", r ? "TRUE" : "FALSE");
 
 	return r;
 }
@@ -272,7 +272,7 @@ f32 rp_random_f32_zo(const f32 mag)
 {
 	const f32 r = mag * ((f32)rand() / (f32)RAND_MAX);
 
-	debugf("rp_random_f32_zo(mag:%f) -> %f\n", (f64)mag, (f64)r);
+	rnd_debugf("rp_random_f32_zo(mag:%f) -> %f\n", (f64)mag, (f64)r);
 
 	return r;
 }
@@ -281,7 +281,7 @@ f32 rp_random_f32_no(const f32 mag)
 {
 	const f32 r = mag * (((f32)rand() / (f32)(RAND_MAX >> 1)) - 1.f);
 
-	debugf("rp_random_f32_no(mag:%f) -> %f\n", (f64)mag, (f64)r);
+	rnd_debugf("rp_random_f32_no(mag:%f) -> %f\n", (f64)mag, (f64)r);
 
 	return r;
 }
