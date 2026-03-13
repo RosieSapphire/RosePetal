@@ -140,10 +140,6 @@ extern f32 rp_random_f32_no(const f32 mag);
 
 #include <time.h>
 
-/*
- * TODO:
- * Update this so it uses the centralized logging function instead of printf.
- */
 #ifdef rnd_debugf
 #error "`rnd_debugf()` is already defined elsewhere!"
 #endif /* #ifdef rnd_debugf */

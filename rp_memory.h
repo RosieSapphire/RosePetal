@@ -160,14 +160,6 @@
  ********************************/
 
 /*
- * Registeres the internal exit callback for the memory allocator
- * which makes sure to clean up and memory left behind and notify
- * you about any pointers you forgot to free (ya greasy bastard).
- */
-extern void _rp_mem_exit_callback_register_internal(const char *file,
-						    const int	line);
-
-/*
  * Allocates a user pointer of a specified `sz` and returns it.
  *
  * This function allocates internal memory for storing
@@ -751,14 +743,18 @@ static void _mem_init(void)
 	mem_debugf("INITIALIZED SUCCESSFULLY!\n");
 }
 
-/********************
- * PUBLIC FUNCTIONS *
- ********************/
-
 /*
- * Internal function for `mem_register_exit_callback()`.
+ * Registeres the internal exit callback for the memory allocator
+ * which makes sure to clean up and memory left behind and notify
+ * you about any pointers you forgot to free (ya greasy bastard).
+ *
+ * Called internally upon first reference of `rp_mem_alloc()`,
+ * as it would be inconvinient to have to call it manually,
+ * and it's just better for it to only be active when an
+ * allocation is made, rather than just having it be another
+ * function you have to remember before actually using the API.
  */
-void _rp_mem_exit_callback_register_internal(const char *file, const int line)
+static void _rp_mem_exit_callback_register(const char *file, const int line)
 {
 	rp_assertf(!(flags & FLAG_IS_INIT),
 		   "Somehow, first allocation has already "
@@ -777,12 +773,19 @@ void _rp_mem_exit_callback_register_internal(const char *file, const int line)
 	flags |= FLAG_HAS_CALLBACK;
 }
 
+/********************
+ * PUBLIC FUNCTIONS *
+ ********************/
+
 void *_rp_mem_alloc_internal(const size_t sz, const char *file, const int line)
 {
 	struct block *s = NULL, *t = NULL;
 	void	     *p = NULL;
 
-	/* If we didn't register a callback, don't go further. */
+	/* If we didn't register a callback yet, do that. */
+	if (!(flags & FLAG_HAS_CALLBACK))
+		_rp_mem_exit_callback_register(file, line);
+
 	rp_assertf_ex(flags & FLAG_HAS_CALLBACK,
 		      file,
 		      line,
@@ -898,8 +901,6 @@ static void rp_memory_test(void)
 
 	fprintf(stdout, "\n[TEST] rp_memory.h:\n\n");
 
-	_rp_mem_exit_callback_register_internal(__FILE__, __LINE__);
-
 	rp_random_seed(UINT32_MAX);
 
 	/* Allocate a bunch of memory */
@@ -970,8 +971,6 @@ static void rp_memory_test(void)
  * them prettier names and passing in the __FILE__ and __LINE__ they were
  * called from for glorious, glorious debugging purposes!
  */
-#define rp_mem_exit_callback_register()                                        \
-	_rp_mem_exit_callback_register_internal(__FILE__, __LINE__)
 #define rp_mem_alloc(_sz) _rp_mem_alloc_internal(_sz, __FILE__, __LINE__)
 #define rp_mem_free(_ptr) _rp_mem_free_internal(_ptr, __FILE__, __LINE__)
 

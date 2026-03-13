@@ -12,7 +12,8 @@ TEST_O    := $(TEST_C:%.c=%.o)
 
 WARN_IGNORE := -Wno-format-nonliteral -Wno-reserved-macro-identifier \
 	       -Wno-reserved-identifier -Wno-variadic-macros \
-	       -Wno-bad-function-cast -Wno-unsafe-buffer-usage
+	       -Wno-bad-function-cast -Wno-unsafe-buffer-usage \
+	       -Wno-disabled-macro-expansion
 
 CC     := clang-20
 CFLAGS := -Wall -Wextra -Weverything -Werror -pedantic -ansi $(WARN_IGNORE)

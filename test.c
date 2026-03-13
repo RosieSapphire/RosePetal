@@ -1,9 +1,7 @@
-/*
- * TODO: Add a separate `rp_log.h` file that can be toggled with
- *       `RP_LOG_ENABLE`. Module-specific macros like `RP_MEMORY_LOG`
- *       and `RP_RANDOM_LOG` will turn on and off this macro for
- *       those specific modules depending on what is necessary.
- */
+/* rp_log.h */
+#define RP_LOG_TEST
+#define RP_LOG_IMPLEMENTATION
+#include "rp_log.h"
 
 /* rp_random.h */
 #define RP_RANDOM_TEST
@@ -19,6 +17,7 @@
 
 int main(void)
 {
+	rp_log_test();
 	rp_random_test();
 	rp_memory_test();
 	return 0;
