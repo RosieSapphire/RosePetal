@@ -43,7 +43,7 @@ static __inline void _rp_assertf_internal(const int   cond,
 
 	va_start(args, fmt);
 	fprintf(stderr,
-		"ASSERTION (%s) @ %s:%d in %s FAILED: ",
+		"ASSERTION (%s) @ %s:%d in %s FAILED: \n\t",
 		cond_str,
 		strrchr(file, '/') ? strrchr(file, '/') + 1 : file,
 		line,
