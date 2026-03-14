@@ -1,6 +1,8 @@
 #ifndef _RP_LOG_H_
 #define _RP_LOG_H_
 
+#include <stdio.h>
+
 #include "rp_types.h"
 
 /*
@@ -130,6 +132,8 @@ extern void _rp_log_file_close_internal(const char *file, const int line);
  * IMPLEMENTATION *
  ******************/
 #ifdef RP_LOG_IMPLEMENTATION
+#include <stdlib.h>
+#include <stdarg.h>
 #include <stdint.h>
 
 static struct {
@@ -151,6 +155,7 @@ static rp_log_state_e _rp_log_state		   = RP_LOG_ON;
 /*
  * Make sure that the state of the internal log file is valid.
  */
+#ifndef RP_LOG_DISABLE
 static void _rp_log_file_verify(const char *file, const int line)
 {
 	/* If file is open, all data must corroborate that. */
@@ -188,7 +193,10 @@ static void _rp_log_file_verify(const char *file, const int line)
 		      line,
 		      "Log file is closed, but it still has the line "
 		      "of the file it was originally opened from");
+	(void)file;
+	(void)line;
 }
+#endif /* #ifndef RP_LOG_DISABLE */
 
 /*
  * POTENTIAL FIXME:
@@ -200,6 +208,7 @@ static void _rp_log_file_verify(const char *file, const int line)
  *
  * We'll see...
  */
+#ifndef RP_LOG_DISABLE
 static void _rp_log_atexit(void)
 {
 	_rp_log_file_verify(__FILE__, __LINE__);
@@ -217,9 +226,11 @@ static void _rp_log_atexit(void)
 			  _rp_log_file.line_opened);
 	_rp_log_file_close_internal(__FILE__, __LINE__);
 }
+#endif /* #ifndef RP_LOG_DISABLE */
 
 void _rp_logf_internal(const char *file, const int line, const char *fmt, ...)
 {
+#ifndef RP_LOG_DISABLE
 	va_list args;
 
 	/*
@@ -253,22 +264,34 @@ void _rp_logf_internal(const char *file, const int line, const char *fmt, ...)
 	va_start(args, fmt);
 	vfprintf(_rp_log_stream_current, fmt, args);
 	va_end(args);
+#else  /* #ifndef RP_LOG_DISABLE */
+	(void)file;
+	(void)line;
+	(void)fmt;
+#endif /* #ifndef RP_LOG_DISABLE #else */
 }
 
 void _rp_log_toggle_internal(const rp_log_state_e s,
 			     const char		 *file,
 			     const int		  line)
 {
+#ifndef RP_LOG_DISABLE
 	rp_assertf_ex(s == RP_LOG_OFF || s == RP_LOG_ON,
 		      file,
 		      line,
 		      "Trying to set logging toggle to an invalid value (%u)",
 		      s);
 	_rp_log_state = s;
+#else  /* #ifndef RP_LOG_DISABLE */
+	(void)s;
+	(void)file;
+	(void)line;
+#endif /* #ifndef RP_LOG_DISABLE #else */
 }
 
 void _rp_log_set_stream_internal(FILE *s, const char *file, const int line)
 {
+#ifndef RP_LOG_DISABLE
 	FILE  *accepted_streams[3];
 	size_t i;
 
@@ -303,6 +326,11 @@ void _rp_log_set_stream_internal(FILE *s, const char *file, const int line)
 		      line,
 		      "Input an invalid file stream for log file (<%p>)\n",
 		      s);
+#else  /* #ifndef RP_LOG_DISABLE */
+	(void)s;
+	(void)file;
+	(void)line;
+#endif /* #ifndef RP_LOG_DISABLE #else */
 }
 
 /*
@@ -312,6 +340,7 @@ void _rp_log_file_open_internal(const char *path,
 				const char *file,
 				const int   line)
 {
+#ifndef RP_LOG_DISABLE
 	/* Ensure valid path */
 	rp_assertf_ex(path,
 		      file,
@@ -344,10 +373,16 @@ void _rp_log_file_open_internal(const char *path,
 	_rp_log_file.path	 = path;
 	_rp_log_file.file_opened = file;
 	_rp_log_file.line_opened = (u32)line;
+#else  /* #ifndef RP_LOG_DISABLE */
+	(void)path;
+	(void)file;
+	(void)line;
+#endif /* #ifndef RP_LOG_DISABLE #else */
 }
 
 void _rp_log_file_close_internal(const char *file, const int line)
 {
+#ifndef RP_LOG_DISABLE
 	_rp_log_file_verify(file, line);
 	rp_assertf(_rp_log_file.fp,
 		   "Trying to close log file at "
@@ -363,6 +398,10 @@ void _rp_log_file_close_internal(const char *file, const int line)
 	_rp_log_file.path	 = NULL;
 	_rp_log_file.file_opened = NULL;
 	_rp_log_file.line_opened = UINT32_MAX;
+#else  /* #ifndef RP_LOG_DISABLE */
+	(void)file;
+	(void)line;
+#endif /* #ifndef RP_LOG_DISABLE #else */
 }
 
 #endif /* #ifdef RP_LOG_IMPLEMENTATION */
