@@ -454,10 +454,11 @@ static struct block *_mem_get_block_from_user_ptr(const void	    *ptr,
  */
 static void _mem_block_set_empty(struct block *b, const which_list_e w)
 {
+#ifdef _DEBUG
 	const char   *wstr;
 	struct block *arr;
-	size_t	      cnt;
-	const bool_t  is_alloc = (w == LIST_ALLOC);
+	size_t	     cnt;
+	const bool_t is_alloc = (w == LIST_ALLOC);
 
 	_ASSERT_WHICH_IS_VALID(w, __FILE__, __LINE__);
 
@@ -476,6 +477,9 @@ static void _mem_block_set_empty(struct block *b, const which_list_e w)
 		   wstr,
 		   (size_t)(b - arr),
 		   cnt);
+#else /* #ifdef _DEBUG */
+	(void)w;
+#endif /* #ifdef _DEBUG #else */
 
 	b->ptr	= NULL;
 	b->sz	= 0ul;
@@ -651,7 +655,9 @@ _mem_move_block_to_free_list(struct block *b, const char *file, const int line)
  */
 static void _mem_atexit(void)
 {
+#ifdef _DEBUG
 	size_t i;
+#endif /* #ifdef _DEBUG */
 
 	/* If we never called `malloc()` in our program, we're good to exit. */
 	if (!(flags & FLAG_IS_INIT)) {
@@ -679,7 +685,9 @@ static void _mem_atexit(void)
 	mem_debugf_end("WARNING: %zu BLOCKS STILL ACTIVE AT EXIT:\n",
 		       memory.alloc_cnt);
 
-	i = 0ul;
+#ifdef _DEBUG
+	i = 0;
+#endif /* #ifdef _DEBUG */
 	while (memory.alloc_cnt) {
 		struct block *s = _mem_block_get(0,
 						 LIST_ALLOC,
@@ -702,7 +710,9 @@ static void _mem_atexit(void)
 			       s->file,
 			       s->line);
 		_mem_move_block_to_free_list(s, __FILE__, __LINE__);
+#ifdef _DEBUG
 		++i;
+#endif /* #ifdef _DEBUG */
 	}
 
 	free(memory.alloc_arr);
