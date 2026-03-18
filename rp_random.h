@@ -55,15 +55,18 @@ RP_STATIC_ASSERT(RAND_MAX == INT32_MAX, RAND_MAX_must_equal_INT32_MAX);
  ********************************/
 
 /*
- * You can seed the randomness with a custom value, or
- * just pass `UINT32_MAX` for it to use `time(NULL)`, which will
+ * Just a simple wrapper for generating a random seed
+ * based off the current system time as opposed to
+ * having to put int `UINT32_MAX` or whatever else.
+ */
+#define RP_RANDOM_SEED_TIME 0xFFFFFFFF
+
+/*
+ * You can seed the randomness with a custom value, or just pass
+ * `RP_RANDOM_SEED_TIME` for it to use `time(NULL)`, which will
  * use the current Unix time that the function was called.
  *
- * It's a little jank as it requires `<limits.h>` to be included
- * and it makes it so you aren't able to pass in UINT32_MAX as
- * an actual seed value, but it should be fine enough for this.
- *
- * Returns the seed if the input wasn't `UINT32_MAX`.
+ * Returns the seed if the input wasn't `RP_RANDOM_SEED_TIME`.
  */
 extern u32 rp_random_seed(const u32 seed);
 
@@ -154,7 +157,7 @@ u32 rp_random_seed(const u32 seed)
 {
 	u32 s;
 
-	s = (seed == UINT32_MAX) ? (u32)time(NULL) : (u32)seed;
+	s = (seed == RP_RANDOM_SEED_TIME) ? (u32)time(NULL) : (u32)seed;
 	srand(s);
 	rnd_debugf("RNG: rp_random_seed(%u) -> %u\n", seed, s);
 
@@ -304,7 +307,7 @@ static void rp_random_test(void)
 	s32 s32_min, s32_max;
 	u32 u32_min, u32_max;
 
-	rp_random_seed(UINT32_MAX);
+	rp_random_seed(RP_RANDOM_SEED_TIME);
 
 	s32_min = rp_random_s32();
 	do {
