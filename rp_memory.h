@@ -703,12 +703,20 @@ static void _mem_atexit(void)
 			   s,
 			   i);
 
+#ifdef _DEBUG
 		mem_debugf_end("\tLEAK %zu: [p:<%p> sz:%zu] %s:%u\n",
 			       i,
 			       s->ptr,
 			       s->sz,
 			       s->file,
 			       s->line);
+#else /* #ifdef _DEBUG */
+		mem_debugf_end("\tLEAK: [p:<%p> sz:%zu] %s:%u\n",
+			       s->ptr,
+			       s->sz,
+			       s->file,
+			       s->line);
+#endif /* #ifdef _DEBUG #else */
 		_mem_move_block_to_free_list(s, __FILE__, __LINE__);
 #ifdef _DEBUG
 		++i;
