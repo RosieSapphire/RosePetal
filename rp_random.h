@@ -152,8 +152,9 @@ extern f32 rp_random_f32_no(const f32 mag);
 
 u32 rp_random_seed(const u32 seed)
 {
-	const u32 s = (seed == UINT32_MAX) ? (u32)time(NULL) : (u32)seed;
+	u32 s;
 
+	s = (seed == UINT32_MAX) ? (u32)time(NULL) : (u32)seed;
 	srand(s);
 	rnd_debugf("RNG: rp_random_seed(%u) -> %u\n", seed, s);
 
@@ -162,9 +163,9 @@ u32 rp_random_seed(const u32 seed)
 
 u32 rp_random_u32(void)
 {
-	const u32 r = (((u32)rand() & 0xFFFF) << 0u) |
-		      (((u32)rand() & 0xFFFF) << 16u);
+	u32 r;
 
+	r = (((u32)rand() & 0xFFFF) << 0u) | (((u32)rand() & 0xFFFF) << 16u);
 	rnd_debugf("rp_random_u32() -> %u\n", r);
 
 	return r;
@@ -188,8 +189,9 @@ u32 rp_random_u32_range(const u32 lo, const u32 hi)
 
 s32 rp_random_s32(void)
 {
-	const s32 r = (s32)rp_random_u32();
+	s32 r;
 
+	r = (s32)rp_random_u32();
 	rnd_debugf("rp_random_s32() -> %d\n", r);
 
 	return r;
@@ -221,8 +223,9 @@ s32 rp_random_s32_range(const s32 lo, const s32 hi)
 
 u16 rp_random_u16(void)
 {
-	const u16 r = (u16)(rp_random_u32() & 0xFFFF);
+	u16 r;
 
+	r = (u16)(rp_random_u32() & 0xFFFF);
 	rnd_debugf("rp_random_u16() -> %u\n", r);
 
 	return r;
@@ -230,8 +233,9 @@ u16 rp_random_u16(void)
 
 s16 rp_random_s16(void)
 {
-	const s16 r = (s16)(rp_random_u32() & 0xFFFF);
+	s16 r;
 
+	r = (s16)(rp_random_u32() & 0xFFFF);
 	rnd_debugf("rp_random_s16() -> %d\n", r);
 
 	return r;
@@ -239,8 +243,9 @@ s16 rp_random_s16(void)
 
 u8 rp_random_u8(void)
 {
-	const u8 r = (u8)(rp_random_u32() & 0xFF);
+	u8 r;
 
+	r = (u8)(rp_random_u32() & 0xFF);
 	rnd_debugf("rp_random_u8() -> %u\n", r);
 
 	return r;
@@ -248,8 +253,9 @@ u8 rp_random_u8(void)
 
 s8 rp_random_s8(void)
 {
-	const s8 r = (s8)(rp_random_u32() & 0xFF);
+	s8 r;
 
+	r = (s8)(rp_random_u32() & 0xFF);
 	rnd_debugf("rp_random_u8() -> %d\n", r);
 
 	return r;
@@ -257,16 +263,22 @@ s8 rp_random_s8(void)
 
 bool_t rp_random_bool_50_percent(void)
 {
-	const bool_t r = (bool_t)(rand() & 1);
+	bool_t r;
 
-	rnd_debugf("rp_random_bool_50_percent() -> %5s\n", r ? "TRUE" : "FALSE");
+	r = (bool_t)(rand() & 1);
+	rnd_debugf("rp_random_bool_50_percent() -> %5s\n",
+		   r ? "TRUE" : "FALSE");
 
 	return r;
 }
 
 f32 rp_random_f32_zo(const f32 mag)
 {
-	const f32 r = mag * ((f32)rand() / (f32)RAND_MAX);
+	s32 rc;
+	f32 r;
+
+	rc = rand();
+	r  = mag * ((f32)rc / (f32)RAND_MAX);
 
 	rnd_debugf("rp_random_f32_zo(mag:%f) -> %f\n", (f64)mag, (f64)r);
 
@@ -275,8 +287,11 @@ f32 rp_random_f32_zo(const f32 mag)
 
 f32 rp_random_f32_no(const f32 mag)
 {
-	const f32 r = mag * (((f32)rand() / (f32)(RAND_MAX >> 1)) - 1.f);
+	s32 rc;
+	f32 r;
 
+	rc = rand();
+	r = mag * (((f32)rc / (f32)(RAND_MAX >> 1)) - 1.f);
 	rnd_debugf("rp_random_f32_no(mag:%f) -> %f\n", (f64)mag, (f64)r);
 
 	return r;
