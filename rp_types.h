@@ -1,16 +1,21 @@
 #ifndef _RP_TYPES_H_
 #define _RP_TYPES_H_
 
+#include <stdint.h>
+
 #include "rp_assert.h"
 
-typedef unsigned char u8;
-typedef signed char   s8;
+typedef uint8_t u8;
+typedef int8_t s8;
 
-typedef unsigned short u16;
-typedef signed short   s16;
+typedef uint16_t u16;
+typedef int16_t s16;
 
-typedef unsigned int u32;
-typedef signed int   s32;
+typedef uint32_t u32;
+typedef int32_t s32;
+
+typedef uint64_t u64;
+typedef int64_t s64;
 
 typedef float  f32;
 typedef double f64;
@@ -28,41 +33,6 @@ typedef double f64;
 #define TRUE  1
 
 typedef unsigned char bool_t;
-
-#ifdef __WIN32__
-
-/* Windows */
-typedef unsigned long long u64;
-typedef signed long long   s64;
-
-#elif defined(__linux__) /* #ifdef __WIN32__ */
-
-/* Linux */
-#ifdef __x86_64__
-
-/* 64-bit */
-typedef unsigned long u64;
-typedef signed long   s64;
-
-#elif defined(__i386__) /* #ifdef __x86_64__ */
-
-/* 32-bit */
-typedef unsigned long long u64;
-typedef signed long long   s64;
-
-#else /* #ifdef __x86_64__ #elif defined(__i386__) */
-
-/* Unsupported/Unknown Register Size */
-#error "Machine is neither 32-bit nor 64-bit... the fuck?"
-
-#endif /* #ifdef __x86_64__ #elif defined(__i386__) #else */
-
-#else /* #ifdef __WIN32__ #elif defined(__linux__) */
-
-/* Unsupported OS */
-#error "Unsupported operating system"
-
-#endif /* #ifdef __WIN32__ #elif defined(__linux__) #else */
 
 RP_STATIC_ASSERT(sizeof(bool_t) == 1, bool_t_must_be_1_bytes);
 RP_STATIC_ASSERT(sizeof(u8) == 1, u8_must_be_1_bytes);
