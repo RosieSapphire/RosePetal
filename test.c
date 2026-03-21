@@ -15,10 +15,17 @@
 #define RP_MEMORY_IMPLEMENTATION
 #include "rp_memory.h"
 
+/* rp_file.h */
+#define RP_FILE_LOG
+#define RP_FILE_TEST
+#define RP_FILE_IMPLEMENTATION
+#include "rp_file.h"
+
 int main(void)
 {
 	rp_log_test();
 	rp_random_test();
 	rp_memory_test();
+	rp_file_test();
 	return 0;
 }

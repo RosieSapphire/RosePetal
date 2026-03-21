@@ -7,9 +7,6 @@
  * shit, and I may add or remove to it as I see fit depending on whether
  * or not I even use half the stuff. Either way, it's just nice to have! :D
  *
- * TODO: Make the functions follow the `_*_internal()` pattern so
- *       that debugging information can be passed through to them.
- *
  * MACRO DEFINE LIST:
  *
  * RP_RANDOM_IMPLEMENTATION:

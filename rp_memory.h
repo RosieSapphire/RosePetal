@@ -233,7 +233,7 @@ static struct memory {
 	size_t	      free_cnt;
 } memory;
 
-static internal_flags_e flags = FLAGS_NONE;
+static internal_flags_e rp_mem_flags = FLAGS_NONE;
 
 /*********************
  * PRIVATE FUNCTIONS *
@@ -660,7 +660,7 @@ static void _mem_atexit(void)
 #endif /* #ifdef _DEBUG */
 
 	/* If we never called `malloc()` in our program, we're good to exit. */
-	if (!(flags & FLAG_IS_INIT)) {
+	if (!(rp_mem_flags & FLAG_IS_INIT)) {
 		rp_assertf(!memory.alloc_arr,
 			   "Init flag is off, but "
 			   "array somehow exists");
@@ -733,13 +733,13 @@ finish_terminate_free_free:
 	memory.free_cnt = 0ul;
 
 finish_terminate_no_free:
-	flags &= ~FLAG_IS_INIT;
+	rp_mem_flags &= ~FLAG_IS_INIT;
 
 	mem_debugf_end("TERMINATED SUCCESSFULLY!\n");
 }
 
 /*
- * This simply enables `FLAG_IS_INIT` in `flags`,
+ * This simply enables `FLAG_IS_INIT` in `rp_mem_flags`,
  * as that's all it really needs to do for now.
  *
  * This function is only called internally by `rp_mem_alloc()` in order to
@@ -747,7 +747,7 @@ finish_terminate_no_free:
  */
 static void _mem_init(void)
 {
-	rp_assertf(!(flags & FLAG_IS_INIT),
+	rp_assertf(!(rp_mem_flags & FLAG_IS_INIT),
 		   "Somehow `_mem_init()` was already called");
 	rp_assertf(!memory.alloc_cnt,
 		   "Trying to init, but array already has size");
@@ -757,7 +757,7 @@ static void _mem_init(void)
 		   "Trying to init, but free list already has size");
 	rp_assertf(!memory.free_arr,
 		   "Trying to init, but free list was already allocated");
-	flags |= FLAG_IS_INIT;
+	rp_mem_flags |= FLAG_IS_INIT;
 	mem_debugf("INITIALIZED SUCCESSFULLY!\n");
 }
 
@@ -774,10 +774,10 @@ static void _mem_init(void)
  */
 static void _rp_mem_exit_callback_register(const char *file, const int line)
 {
-	rp_assertf(!(flags & FLAG_IS_INIT),
+	rp_assertf(!(rp_mem_flags & FLAG_IS_INIT),
 		   "Somehow, first allocation has already "
 		   "been made before registering the callback.");
-	rp_assertf(!(flags & FLAG_HAS_CALLBACK),
+	rp_assertf(!(rp_mem_flags & FLAG_HAS_CALLBACK),
 		   "Callback was already registered");
 
 #ifndef RP_MEMORY_LOG
@@ -788,7 +788,7 @@ static void _rp_mem_exit_callback_register(const char *file, const int line)
 	mem_debugf("Registered exit callback at %s:%d\n", file, line);
 	atexit(_mem_atexit);
 
-	flags |= FLAG_HAS_CALLBACK;
+	rp_mem_flags |= FLAG_HAS_CALLBACK;
 }
 
 /********************
@@ -801,17 +801,17 @@ void *_rp_mem_alloc_internal(const size_t sz, const char *file, const int line)
 	void	     *p = NULL;
 
 	/* If we didn't register a callback yet, do that. */
-	if (!(flags & FLAG_HAS_CALLBACK))
+	if (!(rp_mem_flags & FLAG_HAS_CALLBACK))
 		_rp_mem_exit_callback_register(file, line);
 
-	rp_assertf_ex(flags & FLAG_HAS_CALLBACK,
+	rp_assertf_ex(rp_mem_flags & FLAG_HAS_CALLBACK,
 		      file,
 		      line,
 		      "User hasn't called `mem_register_exit_"
 		      "callback()` before calling `rp_mem_alloc()`.");
 
 	/* First call of `rp_mem_alloc()`. */
-	if (!(flags & FLAG_IS_INIT))
+	if (!(rp_mem_flags & FLAG_IS_INIT))
 		_mem_init();
 
 	rp_assertf_ex(sz, file, line, "Trying to allocate 0 bytes!");
@@ -863,7 +863,7 @@ void _rp_mem_free_internal(void *ptr, const char *file, const int line)
 {
 	struct block *s;
 
-	rp_assertf_ex(flags & FLAG_IS_INIT,
+	rp_assertf_ex(rp_mem_flags & FLAG_IS_INIT,
 		      file,
 		      line,
 		      "No allocation was previously made, "
