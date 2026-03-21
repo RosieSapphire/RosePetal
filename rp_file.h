@@ -58,7 +58,8 @@ enum {
 	RP_FILE_MODE_READ = 0,
 	RP_FILE_MODE_WRITE,
 	RP_FILE_MODE_APPEND,
-	RP_FILE_MODE_COUNT
+	RP_FILE_MODE_COUNT,
+	RP_FILE_MODE_INVALID = 0xFFFF
 };
 typedef u16 rp_file_mode_e;
 
@@ -71,36 +72,39 @@ struct rp_file {
 	rp_file_flags_f flags;
 };
 
-extern void _rp_file_open_internal(struct rp_file	*fp,
-				   const char		*path,
-				   const rp_file_mode_e	 mode,
-				   const rp_file_flags_f flags,
-				   const char		*file,
-				   const int		 line);
-extern void _rp_file_read_32_internal(struct rp_file *fp,
-				      void	     *ptr,
-				      const char     *file,
-				      const int	      line);
-extern void _rp_file_read_16_internal(struct rp_file *fp,
-				      void	     *ptr,
-				      const char     *file,
-				      const int	      line);
-extern void _rp_file_read_8_internal(struct rp_file *fp,
-				     void	    *ptr,
-				     const char	    *file,
-				     const int	     line);
-extern void _rp_file_write_32_internal(struct rp_file *fp,
-				       const void     *ptr,
+extern void   _rp_file_open_internal(struct rp_file	  *fp,
+				     const char		  *path,
+				     const rp_file_mode_e  mode,
+				     const rp_file_flags_f flags,
+				     const char		  *file,
+				     const int		   line);
+extern bool_t _rp_file_is_open_internal(const struct rp_file *fp,
+					const char	     *file,
+					const u32	      line);
+extern void   _rp_file_read_32_internal(struct rp_file *fp,
+					void	       *ptr,
+					const char     *file,
+					const int	line);
+extern void   _rp_file_read_16_internal(struct rp_file *fp,
+					void	       *ptr,
+					const char     *file,
+					const int	line);
+extern void   _rp_file_read_8_internal(struct rp_file *fp,
+				       void	      *ptr,
 				       const char     *file,
 				       const int       line);
-extern void _rp_file_write_16_internal(struct rp_file *fp,
-				       const void     *ptr,
-				       const char     *file,
-				       const int       line);
-extern void _rp_file_write_8_internal(struct rp_file *fp,
-				      const void     *ptr,
-				      const char     *file,
-				      const int	      line);
+extern void   _rp_file_write_32_internal(struct rp_file *fp,
+					 const void	*ptr,
+					 const char	*file,
+					 const int	 line);
+extern void   _rp_file_write_16_internal(struct rp_file *fp,
+					 const void	*ptr,
+					 const char	*file,
+					 const int	 line);
+extern void   _rp_file_write_8_internal(struct rp_file *fp,
+					const void     *ptr,
+					const char     *file,
+					const int	line);
 extern void
 _rp_file_close_internal(struct rp_file *fp, const char *file, const int line);
 
@@ -204,7 +208,11 @@ void _rp_file_open_internal(struct rp_file	 *fp,
 	hnd = fopen(path, mode_flags[mode]);
 	switch (mode) {
 	case RP_FILE_MODE_READ:
-		rp_assertf(hnd, "File \"%s\" does not exist; can't read", path);
+		rp_assertf_ex(hnd,
+			      file,
+			      line,
+			      "File \"%s\" does not exist; can't read",
+			      path);
 		break;
 
 	case RP_FILE_MODE_WRITE:
@@ -240,7 +248,70 @@ void _rp_file_open_internal(struct rp_file	 *fp,
 	fp->open_line = (u32)line;
 	fp->mode      = mode;
 	fp->flags     = flags;
+
+#if 0
+	rp_logf("File \"%s\" from %s:%d:\n",
+		fp->path,
+		fp->open_file,
+		fp->open_line);
+	rp_logf("\t.mode  = %u\n", fp->mode);
+	rp_logf("\t.flags = %u\n", fp->flags);
+#endif
+
 	_rp_file_verify(fp);
+}
+
+bool_t _rp_file_is_open_internal(const struct rp_file *fp,
+				 const char	      *file,
+				 const u32	       line)
+{
+	/*
+	 * FIXME: Honestly, I might just stop doing this stupid shit
+	 *        and just say screw it and use a `backtrace()`...
+	 */
+	(void)file;
+	(void)line;
+
+	_rp_file_verify(fp);
+	rp_assertf(fp, "File pointer is NULL!");
+
+	if (!fp->open_file) {
+		rp_logf("File <%p>: File it was opened in is NULL.\n", fp);
+		return FALSE;
+	}
+
+	if (fp->open_line == UINT32_MAX) {
+		rp_logf("File opened in %s: Line number is invalid.\n",
+			fp->open_file);
+		return FALSE;
+	}
+
+	if (!fp->path) {
+		rp_logf("File from %s:%d: Path is NULL.\n",
+			fp->open_file,
+			fp->open_line);
+		return FALSE;
+	}
+
+	if (!fp->handle) {
+		rp_logf("File \"%s\" from %s:%d: STD Handle is NULL.\n",
+			fp->path,
+			fp->open_file,
+			fp->open_line);
+		return FALSE;
+	}
+
+	if (fp->mode != RP_FILE_MODE_READ && fp->mode != RP_FILE_MODE_WRITE &&
+	    fp->mode != RP_FILE_MODE_APPEND) {
+		rp_logf("File \"%s\" from %s:%d: Mode (%u) is invalid.\n",
+			fp->path,
+			fp->open_file,
+			fp->open_line,
+			fp->mode);
+		return FALSE;
+	}
+
+	return TRUE;
 }
 
 /* Read 32 bits from a file */
@@ -349,10 +420,7 @@ void _rp_file_write_32_internal(struct rp_file *fp,
 
 	memcpy(&v, ptr, sizeof(v));
 
-	_rp_file_logf_internal(file,
-			       line,
-			       "FILE: rp_file_write_32(%u);\n",
-			       v);
+	_rp_file_logf_internal(file, line, "FILE: rp_file_write_32(%u);\n", v);
 
 	/* If we wanna endian-flip, dew it! */
 	if (fp->flags & RP_FILE_FLAGS_ENDIAN_FLIP)
@@ -385,10 +453,7 @@ void _rp_file_write_16_internal(struct rp_file *fp,
 
 	memcpy(&v, ptr, sizeof(v));
 
-	_rp_file_logf_internal(file,
-			       line,
-			       "FILE: rp_file_write_16(%u);\n",
-			       v);
+	_rp_file_logf_internal(file, line, "FILE: rp_file_write_16(%u);\n", v);
 
 	/* If we wanna endian-flip, dew it! */
 	if (fp->flags & RP_FILE_FLAGS_ENDIAN_FLIP)
@@ -421,10 +486,7 @@ void _rp_file_write_8_internal(struct rp_file *fp,
 
 	memcpy(&v, ptr, sizeof(v));
 
-	_rp_file_logf_internal(file,
-			       line,
-			       "FILE: rp_file_write_8(%u);\n",
-			       v);
+	_rp_file_logf_internal(file, line, "FILE: rp_file_write_8(%u);\n", v);
 
 	/* No endian-flipping here, it's a single byte! :D */
 
@@ -565,6 +627,7 @@ static void rp_file_test(void)
 
 #define rp_file_open(_fp, _path, _mode, _flags)                                \
 	_rp_file_open_internal(_fp, _path, _mode, _flags, __FILE__, __LINE__)
+#define rp_file_is_open(_fp) _rp_file_is_open_internal(_fp, __FILE__, __LINE__)
 #define rp_file_read_32(_fp, _ptr)                                             \
 	_rp_file_read_32_internal(_fp, _ptr, __FILE__, __LINE__)
 #define rp_file_read_16(_fp, _ptr)                                             \
